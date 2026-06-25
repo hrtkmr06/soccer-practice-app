@@ -158,15 +158,116 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
           </button>
         </div>
 
-        {/* Body: matrix grid */}
+        {/* Body */}
         <div className="flex-1 overflow-auto p-3 sm:p-6">
-          <div className="overflow-x-auto">
+          {/* Mobile layout */}
+          <div className="lg:hidden space-y-3">
+            {rows.map(row => (
+              <div key={row.key} className="bg-white border border-slate-200 rounded-2xl p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[11px] font-bold text-slate-500">
+                    {rows.indexOf(row) + 1}
+                  </div>
+                  <button
+                    onClick={() => removeRow(row.key)}
+                    disabled={rows.length <= 1}
+                    className="p-1.5 rounded-lg text-slate-300 hover:text-rose-400 hover:bg-rose-50 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">開始</p>
+                    <input
+                      type="time"
+                      value={row.start_time}
+                      onChange={e => updateRowTime(row.key, 'start_time', e.target.value)}
+                      className="w-full h-9 px-2 text-xs font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 tabular-nums leading-none"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">終了</p>
+                    <input
+                      type="time"
+                      value={row.end_time}
+                      onChange={e => updateRowTime(row.key, 'end_time', e.target.value)}
+                      className="w-full h-9 px-2 text-xs font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 tabular-nums leading-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {GRID_AREAS.map(area => {
+                    const fullTeams = row.cells[FULL_AREA] ?? [];
+                    const hasFull = fullTeams.length > 0;
+                    const hasIncompatiblePartial = INCOMPATIBLE_WITH_FULL.some(a => (row.cells[a] ?? []).length > 0);
+                    const teams = getEffectiveTeams(row, area);
+                    const areaDisabled = area === FULL_AREA
+                      ? hasIncompatiblePartial
+                      : hasFull && INCOMPATIBLE_WITH_FULL.includes(area);
+
+                    return (
+                      <div
+                        key={area}
+                        className={`rounded-xl border p-2 ${
+                          areaDisabled ? 'bg-slate-100 border-slate-100 opacity-60' : 'bg-slate-50 border-slate-200'
+                        }`}
+                      >
+                        <div className="mb-2">
+                          <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${AREA_BADGE[area]}`}>
+                            {area}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {TEAM_OPTIONS.map(t => {
+                            const selected = teams.includes(t);
+                            const disabled =
+                              areaDisabled ||
+                              (area === TSUNA_AREA && fullTeams.includes(t) && !selected);
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => updateCell(row.key, area, t)}
+                                className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors ${
+                                  selected
+                                    ? `${TEAM_BADGE[t] ?? 'bg-slate-200 text-slate-700'} border-transparent`
+                                    : disabled
+                                      ? 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed'
+                                      : 'bg-white text-slate-500 border-slate-200 active:bg-slate-100'
+                                }`}
+                              >
+                                {t.replace('チーム', '')}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            <button
+              onClick={addRow}
+              className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-50 active:bg-slate-100 border border-slate-200 text-slate-600 text-sm font-bold rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" /> 時間帯を追加
+            </button>
+          </div>
+
+          {/* Desktop layout */}
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full min-w-[980px] border-collapse">
               <thead>
                 <tr>
                   <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest py-2 pr-2 w-10" />
-                  <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest py-2 px-1 w-24">開始</th>
-                  <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest py-2 px-1 w-24">終了</th>
+                  <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest py-2 px-1 w-28">開始</th>
+                  <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest py-2 px-1 w-28">終了</th>
                   {GRID_AREAS.map(area => (
                     <th key={area} className="py-2 px-1 text-center">
                       <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${AREA_BADGE[area]}`}>
@@ -192,7 +293,7 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
                         type="time"
                         value={row.start_time}
                         onChange={e => updateRowTime(row.key, 'start_time', e.target.value)}
-                        className="w-full px-1.5 py-1.5 text-xs font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 tabular-nums"
+                        className="w-full h-8 px-2 text-xs font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 tabular-nums leading-none"
                       />
                     </td>
                     <td className="py-1.5 px-1">
@@ -200,7 +301,7 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
                         type="time"
                         value={row.end_time}
                         onChange={e => updateRowTime(row.key, 'end_time', e.target.value)}
-                        className="w-full px-1.5 py-1.5 text-xs font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 tabular-nums"
+                        className="w-full h-8 px-2 text-xs font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 tabular-nums leading-none"
                       />
                     </td>
                     {/* Area cells */}
