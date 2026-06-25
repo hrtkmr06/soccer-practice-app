@@ -3,6 +3,7 @@ import { CalendarDays, LayoutList, Zap, BookOpen } from 'lucide-react';
 import CalendarView from './components/CalendarView';
 import PracticeEditor from './components/PracticeEditor';
 import MenuStockPage from './components/MenuStockPage';
+import { isLocalMode } from './lib/supabase';
 
 type View = 'calendar' | 'editor' | 'stock';
 
@@ -58,7 +59,9 @@ export default function App() {
           </nav>
 
           <div className="w-24 sm:w-32 hidden sm:flex items-center justify-end">
-            <span className="text-xs text-white/40 font-medium">コーチポータル</span>
+            <span className="text-xs text-white/40 font-medium">
+              {isLocalMode ? 'ローカルモード' : 'コーチポータル'}
+            </span>
           </div>
         </div>
       </header>

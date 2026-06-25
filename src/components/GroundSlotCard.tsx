@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useDroppable } from '@dnd-kit/core';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { ChevronDown, Trash2, MessageSquare, Edit3, Check } from 'lucide-react';
 import { GroundSlot, SessionBlock, AREA_LEFT_BORDER, AREA_BADGE, TEAM_BADGE, TEAMS, AREAS, getTagColor } from '../types';
 
@@ -126,6 +126,7 @@ export default function GroundSlotCard({
               <BlockInSlot
                 key={block.id}
                 block={block}
+                slotId={slot.id}
                 expanded={expandedBlocks.has(block.id)}
                 onToggle={() => toggleBlock(block.id)}
                 onUpdate={updates => onBlockUpdate(block.id, updates)}
@@ -147,20 +148,41 @@ export default function GroundSlotCard({
 
 /* ── Block card inside a slot ── */
 function BlockInSlot({
-  block, expanded, onToggle, onUpdate, onDelete,
+  block, slotId, expanded, onToggle, onUpdate, onDelete,
 }: {
   block: SessionBlock;
+  slotId: string;
   expanded: boolean;
   onToggle: () => void;
   onUpdate: (updates: Partial<SessionBlock>) => void;
   onDelete: () => void;
 }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `block-${block.id}`,
+    data: {
+      type: 'block',
+      blockId: block.id,
+      fromSlotId: slotId,
+    },
+  });
   const menu = block.practice_menu;
 
   return (
-    <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+    <div
+      ref={setNodeRef}
+      className={`bg-slate-50 border border-slate-200 rounded-xl overflow-hidden transition-opacity ${
+        isDragging ? 'opacity-40' : 'opacity-100'
+      }`}
+    >
       {/* Header row */}
       <button onClick={onToggle} className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-white transition-colors">
+        <span
+          {...listeners}
+          {...attributes}
+          onClick={e => e.stopPropagation()}
+          className="w-2 h-8 rounded-full bg-slate-200 hover:bg-slate-300 shrink-0 cursor-grab active:cursor-grabbing"
+          title="ドラッグして移動"
+        />
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-slate-800 text-sm leading-snug">{block.title}</div>
           {menu?.tags?.length ? (
@@ -211,6 +233,21 @@ function BlockInSlot({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+export function BlockCardOverlay({ block }: { block: SessionBlock }) {
+  return (
+    <div className="bg-white border-2 border-green-400 rounded-xl px-3 py-2.5 shadow-2xl w-72 pointer-events-none rotate-1">
+      <div className="font-semibold text-slate-800 text-sm leading-snug">{block.title}</div>
+      {block.practice_menu?.tags?.length ? (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {block.practice_menu.tags.slice(0, 3).map(tag => (
+            <span key={tag} className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${getTagColor(tag)}`}>{tag}</span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

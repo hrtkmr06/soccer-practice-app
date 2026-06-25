@@ -4,16 +4,17 @@ import { GroundSlot, AREAS, TEAMS, AREA_BADGE, TEAM_BADGE } from '../types';
 
 // "全面" is the whole-field option; partial areas are the sub-areas
 const FULL_AREA = '全面';
+const TSUNA_AREA = '綱端';
 const PARTIAL_AREAS = AREAS.filter(a => a !== '全面' && a !== 'センター');
+const INCOMPATIBLE_WITH_FULL: string[] = PARTIAL_AREAS.filter(a => a !== TSUNA_AREA);
 const GRID_AREAS = [FULL_AREA, ...PARTIAL_AREAS];
 const TEAM_OPTIONS = TEAMS.filter(t => t !== '全体');
-const EMPTY = '';
 
 interface TimeRow {
   key: number;
   start_time: string;
   end_time: string;
-  cells: Record<string, string>; // area → team | ''
+  cells: Record<string, string[]>; // area → teams[]
 }
 
 interface Props {
@@ -36,7 +37,8 @@ function slotsToRows(slots: GroundSlot[]): TimeRow[] {
     if (!groups[tk]) {
       groups[tk] = { key: nextKey(), start_time: s.start_time, end_time: s.end_time, cells: {} };
     }
-    groups[tk].cells[s.area] = s.team;
+    const cur = groups[tk].cells[s.area] ?? [];
+    if (!cur.includes(s.team)) groups[tk].cells[s.area] = [...cur, s.team];
   });
   return Object.values(groups).sort((a, b) => a.start_time.localeCompare(b.start_time));
 }
@@ -65,17 +67,47 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
   function updateCell(key: number, area: string, team: string) {
     setRows(r => r.map(row => {
       if (row.key !== key) return row;
-      const next = { ...row.cells, [area]: team };
-      // If "全面" is selected, clear all partial areas
-      if (area === FULL_AREA && team) {
-        PARTIAL_AREAS.forEach(a => { delete next[a]; });
+      const next: Record<string, string[]> = { ...row.cells };
+      const current = next[area] ?? [];
+      const isSelected = current.includes(team);
+
+      // Toggle off
+      if (isSelected) {
+        next[area] = current.filter(t => t !== team);
+        return { ...row, cells: next };
       }
-      // If a partial area is selected, clear "全面"
-      if (area !== FULL_AREA && team) {
+
+      const fullTeams = next[FULL_AREA] ?? [];
+
+      // Add into FULL: clear incompatible areas first
+      if (area === FULL_AREA) {
+        INCOMPATIBLE_WITH_FULL.forEach(a => { delete next[a]; });
+        // 綱端 can coexist, but not with the same teams as FULL
+        if (next[TSUNA_AREA]?.includes(team)) {
+          next[TSUNA_AREA] = next[TSUNA_AREA].filter(t => t !== team);
+        }
+      }
+
+      // Add into incompatible partial: clear FULL teams
+      if (area !== FULL_AREA && INCOMPATIBLE_WITH_FULL.includes(area)) {
         delete next[FULL_AREA];
       }
+
+      // 綱端 cannot take teams already selected on FULL
+      if (area === TSUNA_AREA && fullTeams.includes(team)) return row;
+
+      next[area] = [...(next[area] ?? []), team];
       return { ...row, cells: next };
     }));
+  }
+
+  function getEffectiveTeams(row: TimeRow, area: string): string[] {
+    const fullTeams = row.cells[FULL_AREA] ?? [];
+    if (fullTeams.length > 0 && INCOMPATIBLE_WITH_FULL.includes(area)) return [];
+    if (area === TSUNA_AREA && fullTeams.length > 0) {
+      return (row.cells[area] ?? []).filter(t => !fullTeams.includes(t));
+    }
+    return row.cells[area] ?? [];
   }
 
   function handleConfirm() {
@@ -83,8 +115,8 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
     let sortIdx = 0;
     rows.forEach(row => {
       GRID_AREAS.forEach(area => {
-        const team = row.cells[area];
-        if (team) {
+        const teams = getEffectiveTeams(row, area);
+        teams.forEach(team => {
           drafts.push({
             start_time: row.start_time,
             end_time: row.end_time,
@@ -92,14 +124,17 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
             team,
             sort_order: sortIdx++,
           });
-        }
+        });
       });
     });
     if (drafts.length === 0) return;
     onConfirm(drafts);
   }
 
-  const filledCount = rows.reduce((acc, row) => acc + GRID_AREAS.filter(a => row.cells[a]).length, 0);
+  const filledCount = rows.reduce(
+    (acc, row) => acc + GRID_AREAS.reduce((n, area) => n + getEffectiveTeams(row, area).length, 0),
+    0
+  );
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -170,31 +205,48 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
                     </td>
                     {/* Area cells */}
                     {GRID_AREAS.map(area => {
-                      const team = row.cells[area] ?? EMPTY;
-                      // Exclusion: "全面" selected → partial areas disabled; partial selected → "全面" disabled
-                      const hasFull = !!row.cells[FULL_AREA];
-                      const hasPartial = PARTIAL_AREAS.some(a => !!row.cells[a]);
-                      const disabled = area === FULL_AREA ? hasPartial && !team : hasFull && !team;
+                      const fullTeams = row.cells[FULL_AREA] ?? [];
+                      const hasFull = fullTeams.length > 0;
+                      const hasIncompatiblePartial = INCOMPATIBLE_WITH_FULL.some(a => (row.cells[a] ?? []).length > 0);
+                      const teams = getEffectiveTeams(row, area);
+                      // Exclusion:
+                      //  - "全面" selected -> テニス側/野球側 disabled, 綱端 remains enabled
+                      //  - テニス側/野球側 selected -> "全面" disabled
+                      const areaDisabled = area === FULL_AREA
+                        ? hasIncompatiblePartial
+                        : hasFull && INCOMPATIBLE_WITH_FULL.includes(area);
 
                       return (
-                        <td key={area} className="py-1.5 px-1 text-center">
-                          <select
-                            value={team}
-                            onChange={e => updateCell(row.key, area, e.target.value)}
-                            disabled={disabled}
-                            className={`w-full px-1 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 appearance-none text-center font-bold cursor-pointer transition-colors ${
-                              disabled
-                                ? 'bg-slate-100 border-slate-100 text-slate-300 cursor-not-allowed opacity-40'
-                                : team
-                                  ? `${TEAM_BADGE[team] ?? 'bg-slate-200 text-slate-700'} border-transparent`
-                                  : 'bg-slate-50 border-slate-200 text-slate-300 hover:border-slate-300'
-                            }`}
-                          >
-                            <option value="">-</option>
-                            {TEAM_OPTIONS.map(t => (
-                              <option key={t} value={t}>{t}</option>
-                            ))}
-                          </select>
+                        <td key={area} className="py-1.5 px-1 align-top">
+                          <div className={`w-full min-h-[64px] border rounded-lg p-1 ${
+                            areaDisabled ? 'bg-slate-100 border-slate-100 opacity-50' : 'bg-slate-50 border-slate-200'
+                          }`}>
+                            <div className="grid grid-cols-2 gap-1">
+                              {TEAM_OPTIONS.map(t => {
+                                const selected = teams.includes(t);
+                                const disabled =
+                                  areaDisabled ||
+                                  (area === TSUNA_AREA && fullTeams.includes(t) && !selected);
+                                return (
+                                  <button
+                                    key={t}
+                                    type="button"
+                                    disabled={disabled}
+                                    onClick={() => updateCell(row.key, area, t)}
+                                    className={`px-1 py-1 rounded text-[10px] font-bold border transition-colors ${
+                                      selected
+                                        ? `${TEAM_BADGE[t] ?? 'bg-slate-200 text-slate-700'} border-transparent`
+                                        : disabled
+                                          ? 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed'
+                                          : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    {t.replace('チーム', '')}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </td>
                       );
                     })}
@@ -231,7 +283,7 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {TEAM_OPTIONS.map(team => {
                   const teamSlots = rows.flatMap(row =>
-                    GRID_AREAS.filter(a => row.cells[a] === team)
+                    GRID_AREAS.filter(a => getEffectiveTeams(row, a).includes(team))
                       .map(a => ({ start: row.start_time, end: row.end_time, area: a }))
                   );
                   if (teamSlots.length === 0) return null;

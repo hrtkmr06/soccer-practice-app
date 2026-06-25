@@ -10,7 +10,7 @@ import {
   TEAMS, WEATHER_OPTIONS, Weather, TEAM_BADGE,
 } from '../types';
 import MenuStockSidebar, { MenuCardOverlay } from './MenuStockSidebar';
-import GroundSlotCard from './GroundSlotCard';
+import GroundSlotCard, { BlockCardOverlay } from './GroundSlotCard';
 import GroundAllocationModal from './GroundAllocationModal';
 import FreeformBoard from './FreeformBoard';
 
@@ -34,6 +34,10 @@ interface Props {
   onBack: () => void;
 }
 
+type MenuDragData = { type: 'menu'; menu: PracticeMenu };
+type BlockDragData = { type: 'block'; blockId: string; fromSlotId: string };
+type DragData = MenuDragData | BlockDragData;
+
 export default function PracticeEditor({ initialDate, onBack }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const [activeDate, setActiveDate] = useState(initialDate ?? today);
@@ -45,6 +49,7 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [draggingMenu, setDraggingMenu] = useState<PracticeMenu | null>(null);
+  const [draggingBlock, setDraggingBlock] = useState<SessionBlock | null>(null);
   const [showAllocationModal, setShowAllocationModal] = useState(false);
   const [activeTeam, setActiveTeam] = useState<string>('Aチーム');
   const [subView, setSubView] = useState<'menu' | 'whiteboard'>('menu');
@@ -94,7 +99,7 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
         .order('sort_order');
       const map: Record<string, SessionBlock[]> = {};
       slotList.forEach(s => { map[s.id] = []; });
-      (blocks ?? []).forEach(b => { if (b.ground_slot_id) (map[b.ground_slot_id] ??= []).push(b); });
+      (blocks as SessionBlock[] ?? []).forEach((b: SessionBlock) => { if (b.ground_slot_id) (map[b.ground_slot_id] ??= []).push(b); });
       setSlotBlocksMap(map);
     } else {
       setSlotBlocksMap({});
@@ -226,6 +231,48 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
     });
   }
 
+  async function moveBlockToSlot(blockId: string, fromSlotId: string, toSlotId: string) {
+    if (fromSlotId === toSlotId) return;
+    const targetSlot = groundSlots.find(s => s.id === toSlotId);
+    if (!targetSlot) return;
+
+    const targetCount = (slotBlocksMap[toSlotId] ?? []).length;
+    await supabase
+      .from('session_blocks')
+      .update({
+        ground_slot_id: toSlotId,
+        start_time: targetSlot.start_time,
+        end_time: targetSlot.end_time,
+        area: targetSlot.area,
+        team: targetSlot.team,
+        sort_order: targetCount,
+      })
+      .eq('id', blockId);
+
+    setSlotBlocksMap(prev => {
+      const fromBlocks = prev[fromSlotId] ?? [];
+      const moving = fromBlocks.find(b => b.id === blockId);
+      if (!moving) return prev;
+
+      const nextFrom = fromBlocks.filter(b => b.id !== blockId);
+      const movedBlock: SessionBlock = {
+        ...moving,
+        ground_slot_id: toSlotId,
+        start_time: targetSlot.start_time,
+        end_time: targetSlot.end_time,
+        area: targetSlot.area,
+        team: targetSlot.team,
+        sort_order: targetCount,
+      };
+
+      return {
+        ...prev,
+        [fromSlotId]: nextFrom,
+        [toSlotId]: [...(prev[toSlotId] ?? []), movedBlock],
+      };
+    });
+  }
+
   async function addMenu(m: { title: string; rules: string; points: string; tags: string[] }) {
     const { data } = await supabase.from('practice_menus').insert(m).select().single();
     if (data) setMenus(prev => [data, ...prev]);
@@ -237,15 +284,45 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
   }
 
   function handleDragStart(e: DragStartEvent) {
-    setDraggingMenu(e.active.data.current as PracticeMenu);
+    const data = e.active.data.current as DragData | undefined;
+    if (!data) return;
+    if (data.type === 'menu') {
+      setDraggingMenu(data.menu);
+      return;
+    }
+    const block = (slotBlocksMap[data.fromSlotId] ?? []).find(b => b.id === data.blockId) ?? null;
+    setDraggingBlock(block);
   }
 
   function handleDragEnd(e: DragEndEvent) {
     setDraggingMenu(null);
+    setDraggingBlock(null);
     const { active, over } = e;
     if (!over) return;
-    const menu = active.data.current as PracticeMenu;
-    if (menu?.id) addMenuToSlot(menu, over.id as string);
+    const overId = String(over.id);
+    let targetSlotId: string | null = null;
+
+    if (groundSlots.some(s => s.id === overId)) {
+      targetSlotId = overId;
+    } else if (overId.startsWith('block-')) {
+      const overBlockId = overId.replace(/^block-/, '');
+      for (const [slotId, blocks] of Object.entries(slotBlocksMap)) {
+        if (blocks.some(b => b.id === overBlockId)) {
+          targetSlotId = slotId;
+          break;
+        }
+      }
+    }
+
+    if (!targetSlotId) return;
+
+    const data = active.data.current as DragData | undefined;
+    if (!data) return;
+    if (data.type === 'menu') {
+      addMenuToSlot(data.menu, targetSlotId);
+      return;
+    }
+    moveBlockToSlot(data.blockId, data.fromSlotId, targetSlotId);
   }
 
   const dateLabel = new Date(activeDate + 'T00:00:00').toLocaleDateString('ja-JP', {
@@ -262,25 +339,26 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
   const hasAnySlots = groundSlots.length > 0;
 
   return (
-    <div className="flex h-full overflow-hidden relative">
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="flex h-full overflow-hidden relative">
 
-      {/* ── Left sidebar (only in menu view) ── */}
-      {subView === 'menu' && (
-        <MenuStockSidebar
-          menus={menus}
-          search={search}
-          onSearchChange={setSearch}
-          activeTag={activeTag}
-          onTagChange={setActiveTag}
-          onAddMenu={addMenu}
-          onDeleteMenu={deleteMenu}
-          sidebarOpen={sidebarOpen}
-          onSidebarClose={() => setSidebarOpen(false)}
-        />
-      )}
+        {/* ── Left sidebar (only in menu view) ── */}
+        {subView === 'menu' && (
+          <MenuStockSidebar
+            menus={menus}
+            search={search}
+            onSearchChange={setSearch}
+            activeTag={activeTag}
+            onTagChange={setActiveTag}
+            onAddMenu={addMenu}
+            onDeleteMenu={deleteMenu}
+            sidebarOpen={sidebarOpen}
+            onSidebarClose={() => setSidebarOpen(false)}
+          />
+        )}
 
-      {/* ── Right main ── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* ── Right main ── */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {/* ── Top bar: date, theme, weather ── */}
         <div className="bg-white border-b border-slate-200 px-4 py-3 flex flex-wrap items-center gap-3 shrink-0">
@@ -348,18 +426,18 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
               }`}
             >
               <Grid3X3 className="w-3.5 h-3.5" />
-              ホワイトボード
+              カテゴリー割り当て
             </button>
           </div>
         </div>
 
         {/* ── Content area ── */}
         {subView === 'whiteboard' ? (
-          <FreeformBoard />
+          <FreeformBoard date={activeDate} />
         ) : (
-          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            {/* ── Ground allocation banner + team tabs ── */}
-            <div className="bg-white border-b border-slate-200 shrink-0">
+            <>
+              {/* ── Ground allocation banner + team tabs ── */}
+              <div className="bg-white border-b border-slate-200 shrink-0">
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <LayoutGrid className="w-4 h-4 text-slate-400" />
@@ -410,10 +488,10 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
                   })}
                 </div>
               )}
-            </div>
+              </div>
 
-            {/* ── Timeline for active team ── */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {/* ── Timeline for active team ── */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {!hasAnySlots ? (
                 <div className="flex flex-col items-center justify-center h-60 text-center px-8">
                   <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
@@ -442,7 +520,7 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
                 <>
                   <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-100 rounded-xl text-xs text-green-700 font-medium">
                     <Pointer className="w-4 h-4 shrink-0" />
-                    左のメニューストックから各枠にドラッグ＆ドロップしてください
+                    メニューストックや配置済みカードを、各枠にドラッグ＆ドロップしてください
                   </div>
 
                   {slotsForActiveTeam.map(slot => (
@@ -471,23 +549,25 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
                   />
                 </div>
               )}
-            </div>
+              </div>
+            </>
+          )}
+        </div>
 
-            <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
-              {draggingMenu && <MenuCardOverlay menu={draggingMenu} />}
-            </DragOverlay>
-          </DndContext>
+        <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
+          {draggingMenu && <MenuCardOverlay menu={draggingMenu} />}
+          {draggingBlock && <BlockCardOverlay block={draggingBlock} />}
+        </DragOverlay>
+
+        {/* Ground allocation modal */}
+        {showAllocationModal && (
+          <GroundAllocationModal
+            existingSlots={groundSlots}
+            onConfirm={handleAllocationConfirm}
+            onClose={() => setShowAllocationModal(false)}
+          />
         )}
       </div>
-
-      {/* Ground allocation modal */}
-      {showAllocationModal && (
-        <GroundAllocationModal
-          existingSlots={groundSlots}
-          onConfirm={handleAllocationConfirm}
-          onClose={() => setShowAllocationModal(false)}
-        />
-      )}
-    </div>
+    </DndContext>
   );
 }

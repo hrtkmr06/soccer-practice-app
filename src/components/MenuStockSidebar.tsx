@@ -157,22 +157,23 @@ export default function MenuStockSidebar({
 export function DraggableMenuCard({ menu, onDelete }: { menu: PracticeMenu; onDelete: (id: string) => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `menu-${menu.id}`,
-    data: menu,
+    data: {
+      type: 'menu',
+      menu,
+    },
   });
 
   return (
     <div
       ref={setNodeRef}
+      {...listeners}
+      {...attributes}
       className={`bg-white border border-slate-200 rounded-xl p-3 transition-all group select-none
         ${isDragging ? 'opacity-30 shadow-lg scale-95' : 'hover:border-green-300 hover:shadow-sm cursor-grab active:cursor-grabbing'}
       `}
     >
       <div className="flex items-start justify-between gap-2">
-        <div
-          {...listeners}
-          {...attributes}
-          className="flex items-start gap-2 flex-1 min-w-0"
-        >
+        <div className="flex items-start gap-2 flex-1 min-w-0 touch-none select-none">
           <GripVertical className="w-4 h-4 text-slate-300 mt-0.5 shrink-0 group-hover:text-slate-400" />
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-slate-800 text-sm leading-snug">{menu.title}</div>
@@ -185,6 +186,8 @@ export function DraggableMenuCard({ menu, onDelete }: { menu: PracticeMenu; onDe
           </div>
         </div>
         <button
+          onPointerDown={e => e.stopPropagation()}
+          onTouchStart={e => e.stopPropagation()}
           onClick={() => onDelete(menu.id)}
           className="p-1 rounded text-transparent group-hover:text-slate-300 hover:!text-rose-400 hover:bg-rose-50 transition-colors shrink-0"
         >

@@ -1,131 +1,353 @@
-import { useState, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { User, RotateCcw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useDraggable, useDroppable } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
+import { Check, Pencil, Plus, RotateCcw, Search, Trash2, Users, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-const TEAMS = ['Aチーム', 'Bチーム', 'Cチーム', '一年生'] as const;
+interface RawPlayer {
+  id: string;
+  name: string;
+  number: number;
+  team: string;
+  original_team?: string;
+  originalTeam?: string;
+}
 
 interface Player {
   id: string;
   name: string;
   number: number;
-  team: string;
-  originalTeam: string;
-  position_x: number;
-  position_y: number;
+  defaultTeam: string;
 }
 
-const TEAM_COLORS: Record<string, { bg: string; ring: string; text: string; accent: string }> = {
-  'Aチーム': { bg: 'bg-[#0d2137]', ring: 'ring-[#0d2137]/30', text: 'text-white', accent: 'bg-[#0d2137]/10' },
-  'Bチーム': { bg: 'bg-green-600', ring: 'ring-green-600/30', text: 'text-white', accent: 'bg-green-50' },
-  'Cチーム': { bg: 'bg-teal-600', ring: 'ring-teal-600/30', text: 'text-white', accent: 'bg-teal-50' },
-  '一年生':  { bg: 'bg-amber-500', ring: 'ring-amber-500/30', text: 'text-white', accent: 'bg-amber-50' },
+interface Props {
+  date: string;
+}
+
+const CATEGORIES = ['Aチーム', 'Bチーム', 'Cチーム', '一年生', '欠席'] as const;
+type Category = typeof CATEGORIES[number];
+
+const CATEGORY_BADGE: Record<Category, string> = {
+  'Aチーム': 'bg-slate-900 text-white',
+  'Bチーム': 'bg-green-600 text-white',
+  'Cチーム': 'bg-teal-600 text-white',
+  '一年生': 'bg-amber-500 text-white',
+  '欠席': 'bg-slate-400 text-white',
 };
 
-const TEAM_HEADER: Record<string, { bg: string; text: string }> = {
-  'Aチーム': { bg: 'bg-[#0d2137]', text: 'text-white' },
-  'Bチーム': { bg: 'bg-green-600', text: 'text-white' },
-  'Cチーム': { bg: 'bg-teal-600', text: 'text-white' },
-  '一年生':  { bg: 'bg-amber-500', text: 'text-white' },
-};
+function storageKey(date: string) {
+  return `practice-category-assignment:${date}`;
+}
 
-// Area positions (top-left, top-right, bottom-left, bottom-right)
-const AREA_CONFIG = [
-  { team: 'Aチーム', x: 0, y: 0 },
-  { team: 'Bチーム', x: 50, y: 0 },
-  { team: 'Cチーム', x: 0, y: 50 },
-  { team: '一年生',  x: 50, y: 50 },
-] as const;
+function DroppableCategory({
+  category,
+  count,
+  onClear,
+  children,
+}: {
+  category: Category;
+  count: number;
+  onClear: () => void;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `category-${category}` });
 
-function PitchBackground() {
   return (
-    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 680 1050" preserveAspectRatio="xMidYMid meet" fill="none" stroke="rgba(16,185,129,0.12)" strokeWidth="3">
-      <rect x="30" y="30" width="620" height="990" />
-      <line x1="30" y1="525" x2="650" y2="525" />
-      <circle cx="340" cy="525" r="91" />
-      <circle cx="340" cy="525" r="4" fill="rgba(16,185,129,0.12)" stroke="none" />
-      <rect x="145" y="30" width="390" height="165" />
-      <rect x="225" y="30" width="230" height="55" />
-      <circle cx="340" cy="145" r="4" fill="rgba(16,185,129,0.12)" stroke="none" />
-      <path d="M 275 195 A 91 91 0 0 0 405 195" />
-      <rect x="145" y="855" width="390" height="165" />
-      <rect x="225" y="995" width="230" height="55" />
-      <circle cx="340" cy="905" r="4" fill="rgba(16,185,129,0.12)" stroke="none" />
-      <path d="M 275 855 A 91 91 0 0 1 405 855" />
-      <path d="M 30 45 A 15 15 0 0 0 45 30" />
-      <path d="M 635 30 A 15 15 0 0 0 650 45" />
-      <path d="M 30 1005 A 15 15 0 0 1 45 1020" />
-      <path d="M 635 1020 A 15 15 0 0 1 650 1005" />
-    </svg>
+    <section
+      ref={setNodeRef}
+      className={`bg-white border rounded-xl overflow-hidden transition-colors w-full md:w-[280px] md:shrink-0 ${
+        isOver ? 'border-green-400 bg-green-50/40' : 'border-slate-200'
+      }`}
+    >
+      <header className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
+        <span className={`px-2 py-1 rounded-md text-xs font-bold ${CATEGORY_BADGE[category]}`}>{category}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400">{count}名</span>
+          <button
+            onClick={onClear}
+            className="text-[10px] px-1.5 py-0.5 rounded border border-slate-200 text-slate-500 hover:bg-slate-50"
+          >
+            クリア
+          </button>
+        </div>
+      </header>
+      <div className="p-2.5 space-y-2.5 min-h-24">{children}</div>
+    </section>
   );
 }
 
-function getTeamFromPosition(x: number, y: number): string {
-  if (x < 50 && y < 50) return 'Aチーム';
-  if (x >= 50 && y < 50) return 'Bチーム';
-  if (x < 50 && y >= 50) return 'Cチーム';
-  return '一年生';
+function DraggablePlayerCard({
+  player,
+  category,
+  selected,
+  onToggleSelect,
+  onEdit,
+  onDelete,
+}: {
+  player: Player;
+  category: Category;
+  selected: boolean;
+  onToggleSelect: (playerId: string) => void;
+  onEdit: (player: Player) => void;
+  onDelete: (player: Player) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `player-${player.id}`,
+    data: { playerId: player.id, from: category },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      style={{ transform: CSS.Translate.toString(transform) }}
+      className={`border rounded-xl p-3 bg-slate-50 cursor-grab active:cursor-grabbing select-none touch-none transition-shadow ${
+        isDragging ? 'opacity-0' : selected ? 'border-green-500 ring-2 ring-green-100' : 'border-slate-200 hover:shadow-sm'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2.5">
+        <span className={`w-6 h-6 rounded-full shrink-0 ${CATEGORY_BADGE[category]}`} />
+        <span className="text-sm font-semibold text-slate-700 leading-tight break-words">{player.name}</span>
+        <div className="flex items-center gap-1 ml-auto">
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onToggleSelect(player.id); }}
+            aria-label={selected ? '選択解除' : '選択'}
+            className={`w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${
+              selected
+                ? 'bg-green-600 text-white border-green-600'
+                : 'bg-white text-slate-400 border-slate-300 hover:text-slate-600 hover:border-slate-400'
+            }`}
+            title="選択"
+          >
+            {selected ? <Check className="w-3.5 h-3.5" /> : <span className="w-2 h-2 rounded-full bg-current" />}
+          </button>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onEdit(player); }}
+            className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            title="編集"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onDelete(player); }}
+            className="p-1 rounded text-slate-400 hover:bg-rose-50 hover:text-rose-500"
+            title="削除"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-export default function FreeformBoard() {
-  const canvasRef = useRef<HTMLDivElement>(null);
+function PlayerCardOverlay({ player }: { player: Player }) {
+  return (
+    <div className="border border-green-400 ring-2 ring-green-200 rounded-xl p-3 bg-white shadow-lg select-none w-[260px] md:w-[280px]">
+      <div className="flex items-center gap-2.5">
+        <span className="w-6 h-6 rounded-full shrink-0 bg-green-600" />
+        <span className="text-sm font-semibold text-slate-700 break-words">{player.name}</span>
+      </div>
+    </div>
+  );
+}
+
+export default function FreeformBoard({ date }: Props) {
   const [players, setPlayers] = useState<Player[]>([]);
+  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addForm, setAddForm] = useState({ name: '', category: 'Aチーム' as Category });
+  const [bulkCategory, setBulkCategory] = useState<Category>('Aチーム');
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
+  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
+  const [editName, setEditName] = useState('');
+  const [formError, setFormError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [changedCount, setChangedCount] = useState(0);
 
-  useEffect(() => { fetchPlayers(); }, []);
-
+  useEffect(() => { void fetchPlayers(); }, []);
   useEffect(() => {
-    const changed = players.filter(p => p.team !== p.originalTeam).length;
-    setChangedCount(changed);
-  }, [players]);
+    try {
+      const raw = localStorage.getItem(storageKey(date));
+      setAssignments(raw ? JSON.parse(raw) : {});
+    } catch {
+      setAssignments({});
+    }
+  }, [date]);
 
   async function fetchPlayers() {
     setLoading(true);
     const { data } = await supabase.from('players').select('*').order('number');
     if (data) {
-      setPlayers(data as Player[]);
+      const rows = data as RawPlayer[];
+      setPlayers(rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        number: r.number,
+        defaultTeam: r.originalTeam ?? r.original_team ?? r.team,
+      })));
     }
     setLoading(false);
   }
 
-  async function updatePlayer(playerId: string, updates: Partial<Player>) {
-    await supabase.from('players').update(updates).eq('id', playerId);
-    setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, ...updates } : p));
+  function assignedCategory(player: Player): Category {
+    const c = assignments[player.id];
+    return (CATEGORIES.includes(c as Category) ? c : player.defaultTeam) as Category;
   }
 
-  async function resetAll() {
-    const updates = players.map(p => ({
-      id: p.id,
-      team: p.originalTeam,
-      position_x: p.originalTeam === 'Aチーム' ? 15 + Math.random() * 30 : p.originalTeam === 'Bチーム' ? 65 + Math.random() * 25 : p.originalTeam === 'Cチーム' ? 15 + Math.random() * 30 : 65 + Math.random() * 25,
-      position_y: p.originalTeam === 'Aチーム' || p.originalTeam === 'Bチーム' ? 15 + Math.random() * 70 : 55 + Math.random() * 35,
-    }));
-    for (const u of updates) {
-      await supabase.from('players').update({ team: u.team, position_x: u.position_x, position_y: u.position_y }).eq('id', u.id);
+  function saveAssignments(next: Record<string, string>) {
+    setAssignments(next);
+    localStorage.setItem(storageKey(date), JSON.stringify(next));
+  }
+
+  function normalizeName(name: string) {
+    return name.trim().toLowerCase();
+  }
+
+  function validateName(name: string, currentId?: string): string | null {
+    const trimmed = name.trim();
+    if (!trimmed) return '選手名を入力してください';
+    if (trimmed.length > 24) return '選手名は24文字以内にしてください';
+    const dup = players.some(p => p.id !== currentId && normalizeName(p.name) === normalizeName(trimmed));
+    if (dup) return '同じ選手名がすでに登録されています';
+    return null;
+  }
+
+  function assign(playerId: string, category: Category) {
+    const next = { ...assignments, [playerId]: category };
+    saveAssignments(next);
+  }
+
+  function resetToday() {
+    setAssignments({});
+    localStorage.removeItem(storageKey(date));
+  }
+
+  async function addPlayer() {
+    const name = addForm.name.trim();
+    const error = validateName(name);
+    if (error) {
+      setFormError(error);
+      return;
     }
-    setPlayers(prev => prev.map(p => {
-      const u = updates.find(x => x.id === p.id);
-      return u ? { ...p, team: u.team, position_x: u.position_x, position_y: u.position_y } : p;
-    }));
+    const nextNumber = players.reduce((max, p) => Math.max(max, p.number ?? 0), 0) + 1;
+
+    const { data } = await supabase
+      .from('players')
+      .insert({
+        name,
+        number: nextNumber,
+        team: addForm.category,
+        original_team: addForm.category,
+      })
+      .select()
+      .single();
+
+    if (!data) return;
+    const r = data as RawPlayer;
+    setPlayers((prev) => [...prev, {
+      id: r.id,
+      name: r.name,
+      number: r.number,
+      defaultTeam: r.originalTeam ?? r.original_team ?? r.team,
+    }].sort((a, b) => a.number - b.number));
+
+    setAddForm({ name: '', category: 'Aチーム' });
+    setShowAddForm(false);
+    setFormError('');
   }
 
-  function handleDragEnd(playerId: string, info: { point: { x: number; y: number } }) {
-    setDraggingId(null);
-    if (!canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = info.point.x - rect.left;
-    const y = info.point.y - rect.top;
-
-    const xPct = Math.max(2, Math.min(98, (x / rect.width) * 100));
-    const yPct = Math.max(2, Math.min(98, (y / rect.height) * 100));
-
-    const newTeam = getTeamFromPosition(xPct, yPct);
-    updatePlayer(playerId, { position_x: xPct, position_y: yPct, team: newTeam });
+  function startEditPlayer(player: Player) {
+    setEditingPlayer(player);
+    setEditName(player.name);
+    setFormError('');
   }
 
-  const playersByTeam = (team: string) => players.filter(p => p.team === team);
+  async function saveEditPlayer() {
+    if (!editingPlayer) return;
+    const error = validateName(editName, editingPlayer.id);
+    if (error) {
+      setFormError(error);
+      return;
+    }
+    await supabase.from('players').update({ name: editName.trim() }).eq('id', editingPlayer.id);
+    setPlayers(prev => prev.map(p => p.id === editingPlayer.id ? { ...p, name: editName.trim() } : p));
+    setEditingPlayer(null);
+    setEditName('');
+    setFormError('');
+  }
+
+  async function deletePlayer(player: Player) {
+    await supabase.from('players').delete().eq('id', player.id);
+    setPlayers(prev => prev.filter(p => p.id !== player.id));
+    setSelectedPlayerIds(prev => prev.filter(id => id !== player.id));
+    const next = { ...assignments };
+    delete next[player.id];
+    saveAssignments(next);
+  }
+
+  function toggleSelectPlayer(playerId: string) {
+    setSelectedPlayerIds(prev => prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]);
+  }
+
+  function clearSelection() {
+    setSelectedPlayerIds([]);
+  }
+
+  function moveSelectedToCategory(category: Category) {
+    if (selectedPlayerIds.length === 0) return;
+    const next = { ...assignments };
+    selectedPlayerIds.forEach(id => { next[id] = category; });
+    saveAssignments(next);
+    setSelectedPlayerIds([]);
+  }
+
+  function clearCategory(category: Category) {
+    const next = { ...assignments };
+    players.forEach((p) => {
+      if (assignedCategory(p) === category) delete next[p.id];
+    });
+    saveAssignments(next);
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    const playerId = event.active.data.current?.playerId as string | undefined;
+    setActivePlayerId(playerId ?? null);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActivePlayerId(null);
+    const { active, over } = event;
+    if (!over) return;
+    const playerId = active.data.current?.playerId as string | undefined;
+    if (!playerId) return;
+    const overId = String(over.id);
+    if (!overId.startsWith('category-')) return;
+    const next = overId.replace('category-', '') as Category;
+    if (!CATEGORIES.includes(next)) return;
+    assign(playerId, next);
+  }
+
+  const activePlayer = activePlayerId ? players.find((p) => p.id === activePlayerId) ?? null : null;
+
+  const filtered = useMemo(
+    () => players.filter((p) =>
+      !search ||
+      p.name.includes(search)
+    ),
+    [players, search]
+  );
+
+  const grouped = useMemo(() => {
+    const g: Record<Category, Player[]> = { 'Aチーム': [], 'Bチーム': [], 'Cチーム': [], '一年生': [], '欠席': [] };
+    filtered.forEach((p) => { g[assignedCategory(p)].push(p); });
+    return g;
+  }, [filtered, assignments]);
 
   if (loading) {
     return (
@@ -136,140 +358,156 @@ export default function FreeformBoard() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-4 py-3 shrink-0 flex items-center justify-between z-10">
-        <div className="flex items-center gap-2">
-          <User className="w-4 h-4 text-green-600" />
-          <span className="font-bold text-slate-800 text-sm">ホワイトボード</span>
-          <span className="text-xs text-slate-400">選手を自由にドラッグして配置</span>
+    <div className="flex flex-col h-full overflow-hidden bg-slate-50">
+      <div className="bg-white border-b border-slate-200 px-4 py-3 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-slate-500" />
+            <div>
+              <p className="text-sm font-bold text-slate-700">カテゴリー割り当て（D&D）</p>
+              <p className="text-[11px] text-slate-500">{date} の所属をドラッグで変更</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={() => setShowAddForm(v => !v)}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700"
+            >
+              {showAddForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+              選手追加
+            </button>
+            <button
+              onClick={resetToday}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              今日の割り当てをリセット
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {changedCount > 0 && (
-            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">
-              {changedCount} 名変動
-            </span>
-          )}
-          <button
-            onClick={resetAll}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-colors"
-            title="全選手を元の位置に戻す"
+
+        <div className="mt-3 relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="選手名で検索"
+            className="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <select
+            value={bulkCategory}
+            onChange={(e) => setBulkCategory(e.target.value as Category)}
+            className="flex-1 sm:flex-none px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            リセット
+            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <button
+            onClick={() => moveSelectedToCategory(bulkCategory)}
+            disabled={selectedPlayerIds.length === 0}
+            className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 disabled:opacity-40 disabled:pointer-events-none"
+          >
+            選択中を一括で移動
           </button>
+          <button
+            onClick={clearSelection}
+            disabled={selectedPlayerIds.length === 0}
+            className="flex-1 sm:flex-none px-3 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none"
+          >
+            選択解除
+          </button>
+          <span className="text-[11px] text-slate-400">選択: {selectedPlayerIds.length}名</span>
         </div>
+
+        {showAddForm && (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_140px_100px] gap-2">
+            <input
+              value={addForm.name}
+              onChange={(e) => setAddForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="選手名"
+              className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+            <select
+              value={addForm.category}
+              onChange={(e) => setAddForm(f => ({ ...f, category: e.target.value as Category }))}
+              className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button
+              onClick={addPlayer}
+              className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+            >
+              追加
+            </button>
+          </div>
+        )}
+        {formError && (
+          <p className="mt-2 text-xs text-rose-500 font-semibold">{formError}</p>
+        )}
       </div>
 
-      {/* Canvas */}
-      <div className="flex-1 overflow-auto p-4 bg-slate-100">
-        <div
-          ref={canvasRef}
-          className="relative mx-auto"
-          style={{
-            width: 'min(100%, 1200px)',
-            minWidth: '700px',
-            aspectRatio: '1 / 1',
-          }}
-        >
-          {/* 4 Quadrants */}
-          <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
-            {AREA_CONFIG.map(({ team }) => (
-              <div
-                key={team}
-                className="relative border border-slate-200/60 overflow-hidden"
-                style={{
-                  background: 'linear-gradient(180deg, #fafbfc 0%, #f0f4f8 100%)',
-                }}
+      <div className="flex-1 overflow-auto p-4">
+        <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActivePlayerId(null)}>
+          <div className="flex flex-col md:flex-row gap-3 md:min-w-max">
+            {CATEGORIES.map((category) => (
+              <DroppableCategory
+                key={category}
+                category={category}
+                count={grouped[category].length}
+                onClear={() => clearCategory(category)}
               >
-                {/* Pitch markings */}
-                <PitchBackground />
-
-                {/* Team label */}
-                <div className={`absolute top-3 left-3 px-3 py-1.5 rounded-lg text-xs font-black shadow-sm z-10 ${TEAM_HEADER[team]?.bg ?? 'bg-slate-500'} ${TEAM_HEADER[team]?.text ?? 'text-white'}`}>
-                  {team}
-                </div>
-
-                {/* Player count */}
-                <div className="absolute top-3 right-3 text-xs font-bold text-slate-300 z-10">
-                  {playersByTeam(team).length} 名
-                </div>
-
-                {/* Team area subtle overlay */}
-                <div
-                  className="absolute inset-0 pointer-events-none opacity-[0.03]"
-                  style={{
-                    background: team === 'Aチーム' ? '#0d2137' : team === 'Bチーム' ? '#16a34a' : team === 'Cチーム' ? '#0d9488' : '#f59e0b',
-                  }}
-                />
-              </div>
+                {grouped[category].length === 0 ? (
+                  <p className="text-xs text-slate-300 px-2 py-4 text-center">ここにドロップ</p>
+                ) : (
+                  grouped[category].map((p) => (
+                    <DraggablePlayerCard
+                      key={p.id}
+                      player={p}
+                      category={category}
+                      selected={selectedPlayerIds.includes(p.id)}
+                      onToggleSelect={toggleSelectPlayer}
+                      onEdit={startEditPlayer}
+                      onDelete={deletePlayer}
+                    />
+                  ))
+                )}
+              </DroppableCategory>
             ))}
           </div>
-
-          {/* Grid lines */}
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-1/2 left-0 right-0 h-px bg-slate-300/60" />
-            <div className="absolute left-1/2 top-0 bottom-0 w-px bg-slate-300/60" />
-          </div>
-
-          {/* Players */}
-          {players.map(player => {
-            const colors = TEAM_COLORS[player.team] ?? TEAM_COLORS['Aチーム'];
-            const isMoved = player.team !== player.originalTeam;
-            const isDragging = draggingId === player.id;
-
-            return (
-              <motion.div
-                key={player.id}
-                drag
-                dragMomentum={false}
-                dragElastic={0.05}
-                onDragStart={() => setDraggingId(player.id)}
-                onDragEnd={(_, info) => handleDragEnd(player.id, info)}
-                className="absolute z-20 cursor-grab active:cursor-grabbing select-none"
-                style={{
-                  left: `${player.position_x}%`,
-                  top: `${player.position_y}%`,
-                  transform: 'translate(-50%, -50%)',
-                }}
-                whileHover={{ scale: 1.15, zIndex: 30 }}
-                whileTap={{ scale: 0.92 }}
-                whileDrag={{ scale: 1.2, zIndex: 40, cursor: 'grabbing' }}
-                animate={{
-                  scale: isDragging ? 1.2 : 1,
-                  zIndex: isDragging ? 40 : 20,
-                  boxShadow: isDragging
-                    ? '0 20px 40px rgba(0,0,0,0.25), 0 8px 16px rgba(0,0,0,0.15)'
-                    : '0 4px 12px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.08)',
-                }}
-                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-              >
-                <div className="flex flex-col items-center gap-0.5">
-                  {/* Magnet circle */}
-                  <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-black shadow-md ring-2 ring-offset-2 transition-colors ${colors.bg} ${colors.text} ${colors.ring}`}
-                    style={{
-                      backgroundColor: isMoved ? undefined : undefined,
-                    }}
-                  >
-                    {player.number}
-                  </div>
-                  {/* Name */}
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap leading-tight shadow-sm ${isMoved ? 'bg-amber-100 text-amber-700' : 'bg-white/90 text-slate-700'}`}>
-                    {player.name}
-                  </span>
-                  {/* Original team badge (if moved) */}
-                  {isMoved && (
-                    <span className="text-[9px] font-bold text-white bg-amber-500 px-1.5 py-0.5 rounded-full whitespace-nowrap shadow-sm">
-                      {player.originalTeam}
-                    </span>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
+          <DragOverlay>
+            {activePlayer ? <PlayerCardOverlay player={activePlayer} /> : null}
+          </DragOverlay>
+        </DndContext>
       </div>
+      {editingPlayer && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={() => setEditingPlayer(null)}>
+          <div className="bg-white rounded-xl border border-slate-200 w-full max-w-sm p-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-slate-700">選手名を編集</h3>
+            <input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="mt-3 w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+            {formError && <p className="mt-2 text-xs text-rose-500 font-semibold">{formError}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setEditingPlayer(null)}
+                className="px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={saveEditPlayer}
+                className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

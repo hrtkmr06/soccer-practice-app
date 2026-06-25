@@ -46,8 +46,9 @@ export default function CalendarView({ onEditSession }: Props) {
       .order('date');
 
     if (sessionData) {
-      setSessions(sessionData);
-      const ids = sessionData.map(s => s.id);
+      const typedSessions = sessionData as PracticeSession[];
+      setSessions(typedSessions);
+      const ids = typedSessions.map((s: PracticeSession) => s.id);
       if (ids.length > 0) {
         const { data: blockData } = await supabase
           .from('session_blocks')
@@ -56,7 +57,7 @@ export default function CalendarView({ onEditSession }: Props) {
           .order('start_time');
         if (blockData) {
           const map: Record<string, SessionBlock[]> = {};
-          blockData.forEach(b => { (map[b.session_id] ??= []).push(b); });
+          (blockData as SessionBlock[]).forEach((b: SessionBlock) => { (map[b.session_id] ??= []).push(b); });
           setBlocksMap(map);
         }
       } else {
