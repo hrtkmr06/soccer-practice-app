@@ -10,10 +10,11 @@ interface Props {
   onSlotUpdate: (id: string, updates: Partial<GroundSlot>) => void;
   onBlockDelete: (id: string) => void;
   onBlockUpdate: (id: string, updates: Partial<SessionBlock>) => void;
+  onAddMenuTap?: (slotId: string) => void;
 }
 
 export default function GroundSlotCard({
-  slot, blocks, onSlotDelete, onSlotUpdate, onBlockDelete, onBlockUpdate,
+  slot, blocks, onSlotDelete, onSlotUpdate, onBlockDelete, onBlockUpdate, onAddMenuTap,
 }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: slot.id });
   const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set());
@@ -116,9 +117,19 @@ export default function GroundSlotCard({
       {/* Drop zone / blocks area */}
       <div className={`p-3 min-h-[72px] transition-colors ${isOver ? 'bg-green-50/50' : ''}`}>
         {blocks.length === 0 ? (
-          <div className={`flex items-center justify-center h-14 rounded-lg border-2 border-dashed transition-colors text-xs font-medium
-            ${isOver ? 'border-green-400 text-green-500 bg-green-50' : 'border-slate-200 text-slate-300'}`}>
-            {isOver ? 'ここにドロップ' : '左のメニューをドラッグ＆ドロップ'}
+          <div className="space-y-2">
+            <div className={`flex items-center justify-center h-14 rounded-lg border-2 border-dashed transition-colors text-xs font-medium
+              ${isOver ? 'border-green-400 text-green-500 bg-green-50' : 'border-slate-200 text-slate-300'}`}>
+              {isOver ? 'ここにドロップ' : '左のメニューをドラッグ＆ドロップ'}
+            </div>
+            {onAddMenuTap && (
+              <button
+                onClick={() => onAddMenuTap(slot.id)}
+                className="w-full lg:hidden py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
+              >
+                タップしてメニュー追加
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
@@ -138,6 +149,14 @@ export default function GroundSlotCard({
               <div className="flex items-center justify-center h-10 rounded-lg border-2 border-dashed border-green-400 text-green-500 text-xs font-medium bg-green-50">
                 追加でドロップ
               </div>
+            )}
+            {onAddMenuTap && (
+              <button
+                onClick={() => onAddMenuTap(slot.id)}
+                className="w-full lg:hidden py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
+              >
+                タップしてメニュー追加
+              </button>
             )}
           </div>
         )}

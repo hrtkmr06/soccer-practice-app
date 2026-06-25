@@ -3,7 +3,7 @@ import {
   DndContext, DragOverlay, DragStartEvent, DragEndEvent,
   PointerSensor, TouchSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
-import { Sun, Cloud, CloudRain, CloudSnow, BookOpen, Settings2, LayoutGrid, ArrowLeft, Pointer, Grid3X3 } from 'lucide-react';
+import { Sun, Cloud, CloudRain, CloudSnow, BookOpen, Settings2, LayoutGrid, ArrowLeft, Pointer, Grid3X3, X, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import {
   PracticeMenu, PracticeSession, GroundSlot, SessionBlock,
@@ -51,6 +51,8 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
   const [draggingMenu, setDraggingMenu] = useState<PracticeMenu | null>(null);
   const [draggingBlock, setDraggingBlock] = useState<SessionBlock | null>(null);
   const [showAllocationModal, setShowAllocationModal] = useState(false);
+  const [mobileMenuPickerSlotId, setMobileMenuPickerSlotId] = useState<string | null>(null);
+  const [mobileMenuQuery, setMobileMenuQuery] = useState('');
   const [activeTeam, setActiveTeam] = useState<string>('Aチーム');
   const [subView, setSubView] = useState<'menu' | 'whiteboard'>('menu');
 
@@ -328,6 +330,9 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
   const dateLabel = new Date(activeDate + 'T00:00:00').toLocaleDateString('ja-JP', {
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
   });
+  const dateLabelShort = new Date(activeDate + 'T00:00:00').toLocaleDateString('ja-JP', {
+    year: 'numeric', month: 'numeric', day: 'numeric',
+  });
 
   const teamsWithSlots = TEAMS.filter(t => groundSlots.some(s => s.team === t));
   const tabs = teamsWithSlots.length > 0 ? teamsWithSlots : [];
@@ -379,7 +384,10 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
           )}
 
           <div className="flex-1 min-w-0">
-            <h2 className="font-black text-slate-800 text-sm leading-tight">{dateLabel}</h2>
+            <h2 className="font-black text-slate-800 text-sm leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
+              <span className="hidden sm:inline">{dateLabel}</span>
+              <span className="sm:hidden">{dateLabelShort}</span>
+            </h2>
             <input
               type="text"
               placeholder="全体テーマを入力..."
@@ -528,6 +536,7 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
                       key={slot.id}
                       slot={slot}
                       blocks={slotBlocksMap[slot.id] ?? []}
+                      onAddMenuTap={(slotId) => setMobileMenuPickerSlotId(slotId)}
                       onSlotDelete={deleteGroundSlot}
                       onSlotUpdate={updateGroundSlot}
                       onBlockDelete={deleteBlock}
@@ -566,6 +575,65 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
             onConfirm={handleAllocationConfirm}
             onClose={() => setShowAllocationModal(false)}
           />
+        )}
+
+        {mobileMenuPickerSlotId && (
+          <div
+            className="fixed inset-0 bg-black/40 z-[60] flex items-end lg:hidden"
+            onClick={() => { setMobileMenuPickerSlotId(null); setMobileMenuQuery(''); }}
+          >
+            <div
+              className="w-full max-h-[78vh] bg-white rounded-t-2xl border-t border-slate-200 flex flex-col"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <p className="text-sm font-bold text-slate-700">メニューを追加</p>
+                <button
+                  onClick={() => { setMobileMenuPickerSlotId(null); setMobileMenuQuery(''); }}
+                  className="p-1.5 rounded-lg hover:bg-slate-100"
+                >
+                  <X className="w-4 h-4 text-slate-400" />
+                </button>
+              </div>
+              <div className="p-3 border-b border-slate-100">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    value={mobileMenuQuery}
+                    onChange={(e) => setMobileMenuQuery(e.target.value)}
+                    placeholder="メニュー名で検索"
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {menus
+                  .filter(m => !mobileMenuQuery || m.title.includes(mobileMenuQuery))
+                  .map(menu => (
+                    <button
+                      key={menu.id}
+                      onClick={() => {
+                        addMenuToSlot(menu, mobileMenuPickerSlotId);
+                        setMobileMenuPickerSlotId(null);
+                        setMobileMenuQuery('');
+                      }}
+                      className="w-full text-left p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100"
+                    >
+                      <p className="text-sm font-semibold text-slate-700">{menu.title}</p>
+                      {menu.tags.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {menu.tags.slice(0, 3).map(tag => (
+                            <span key={tag} className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-slate-200 text-slate-500">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </DndContext>

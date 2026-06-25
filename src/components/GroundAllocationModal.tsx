@@ -139,7 +139,7 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+        className="bg-white rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -159,9 +159,9 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
         </div>
 
         {/* Body: matrix grid */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-3 sm:p-6">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
+            <table className="w-full min-w-[980px] border-collapse">
               <thead>
                 <tr>
                   <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest py-2 pr-2 w-10" />
@@ -312,21 +312,21 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
+        <div className="px-4 sm:px-6 py-4 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0 bg-slate-50">
           <p className="text-xs text-slate-400">
             {filledCount > 0 ? `${filledCount} 枠を設定中` : 'マス目にチームを選択してください'}
           </p>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm font-bold rounded-xl transition-colors"
+              className="w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm font-bold rounded-xl transition-colors"
             >
               キャンセル
             </button>
             <button
               onClick={handleConfirm}
               disabled={filledCount === 0}
-              className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-black rounded-xl transition-colors shadow-sm"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-black rounded-xl transition-colors shadow-sm"
             >
               <Check className="w-4 h-4" />
               確定して枠を生成
