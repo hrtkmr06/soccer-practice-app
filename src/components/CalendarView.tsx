@@ -101,17 +101,17 @@ export default function CalendarView({ onEditSession }: Props) {
   const cells: { day: number; current: boolean; dateStr: string }[] = [];
   for (let i = 0; i < firstDay; i++) {
     const day = prevMonthDays - firstDay + 1 + i;
-    cells.push({ day, current: false, dateStr: new Date(current.year, current.month - 1, day).toISOString().slice(0, 10) });
+    cells.push({ day, current: false, dateStr: formatLocalDate(new Date(current.year, current.month - 1, day)) });
   }
   for (let d = 1; d <= daysInMonth; d++) {
-    cells.push({ day: d, current: true, dateStr: new Date(current.year, current.month, d).toISOString().slice(0, 10) });
+    cells.push({ day: d, current: true, dateStr: formatLocalDate(new Date(current.year, current.month, d)) });
   }
   while (cells.length < 42) {
     const d = cells.length - firstDay - daysInMonth + 1;
-    cells.push({ day: d, current: false, dateStr: new Date(current.year, current.month + 1, d).toISOString().slice(0, 10) });
+    cells.push({ day: d, current: false, dateStr: formatLocalDate(new Date(current.year, current.month + 1, d)) });
   }
 
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = formatLocalDate(today);
   const selectedBlocks = selected ? blocksMap[selected.id] ?? [] : [];
 
   return (
@@ -145,7 +145,7 @@ export default function CalendarView({ onEditSession }: Props) {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="grid grid-cols-7">
               {WEEKDAYS.map((wd, i) => (
-                <div key={wd} className={`py-2.5 text-center text-xs sm:text-sm font-bold border-b border-slate-200 ${i === 0 ? 'text-rose-500' : i === 6 ? 'text-sky-500' : 'text-slate-400'}`}>
+                <div key={wd} className={`py-2.5 text-center text-xs sm:text-sm font-bold border-b border-slate-200 ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-slate-400'}`}>
                   {wd}
                 </div>
               ))}
@@ -155,7 +155,7 @@ export default function CalendarView({ onEditSession }: Props) {
                 const session = cell.current ? sessionByDate[cell.dateStr] : undefined;
                 const blocks = session ? blocksMap[session.id] ?? [] : [];
                 const isToday = cell.dateStr === todayStr;
-                const dow = new Date(cell.dateStr).getDay();
+                const dow = new Date(`${cell.dateStr}T00:00:00`).getDay();
 
                 return (
                   <div
@@ -163,7 +163,7 @@ export default function CalendarView({ onEditSession }: Props) {
                     onClick={() => { if (cell.current && session) setSelected(session); }}
                     className={`min-h-[84px] sm:min-h-[110px] p-1.5 relative group transition-colors ${cell.current ? (session ? 'cursor-pointer hover:bg-green-50' : 'hover:bg-slate-50') : 'bg-slate-50 opacity-40 pointer-events-none'} ${isToday ? 'bg-green-50/70' : ''}`}
                   >
-                    <div className={`text-xs sm:text-sm font-bold mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-green-600 text-white' : dow === 0 ? 'text-rose-500' : dow === 6 ? 'text-sky-500' : 'text-slate-700'}`}>
+                    <div className={`text-xs sm:text-sm font-bold mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-green-600 text-white' : dow === 0 ? 'text-red-500' : dow === 6 ? 'text-blue-500' : 'text-slate-700'}`}>
                       {cell.day}
                     </div>
 
@@ -217,6 +217,13 @@ export default function CalendarView({ onEditSession }: Props) {
       )}
     </div>
   );
+}
+
+function formatLocalDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 /* ── Session Detail Modal ── */
