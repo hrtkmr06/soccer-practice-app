@@ -7,12 +7,13 @@ import { Sun, Cloud, CloudRain, CloudSnow, BookOpen, Settings2, LayoutGrid, Arro
 import { supabase } from '../lib/supabase';
 import {
   PracticeMenu, PracticeSession, GroundSlot, SessionBlock,
-  TEAMS, WEATHER_OPTIONS, Weather, TEAM_BADGE,
+  Menu, TEAMS, WEATHER_OPTIONS, Weather, TEAM_BADGE,
 } from '../types';
 import MenuStockSidebar, { MenuCardOverlay } from './MenuStockSidebar';
 import GroundSlotCard, { BlockCardOverlay } from './GroundSlotCard';
 import GroundAllocationModal from './GroundAllocationModal';
 import FreeformBoard from './FreeformBoard';
+import menusJson from '../menus.json';
 
 function WeatherBtn({ w, current, onClick }: { w: Weather; current: string | null; onClick: () => void }) {
   const active = current === w;
@@ -62,11 +63,21 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
   );
 
   useEffect(() => { fetchMenus(); }, []);
-  useEffect(() => { fetchSession(); }, [activeDate]);
+  useEffect(() => { fetchSession(); }, [activeDate, menus]);
 
   async function fetchMenus() {
-    const { data } = await supabase.from('practice_menus').select('*').order('created_at', { ascending: false });
-    if (data) setMenus(data);
+    const seedMenus = (menusJson as Menu[]).map((m, index) => ({
+      id: `json-menu-${index + 1}`,
+      title: m.title,
+      description: m.description,
+      duration: m.duration,
+      category: m.category,
+      rules: m.description,
+      points: `${m.duration}分`,
+      tags: [m.category],
+      created_at: new Date(0).toISOString(),
+    }));
+    setMenus(seedMenus);
   }
 
   async function fetchSession() {
@@ -101,7 +112,15 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
         .order('sort_order');
       const map: Record<string, SessionBlock[]> = {};
       slotList.forEach(s => { map[s.id] = []; });
-      (blocks as SessionBlock[] ?? []).forEach((b: SessionBlock) => { if (b.ground_slot_id) (map[b.ground_slot_id] ??= []).push(b); });
+      const menuByTitle = new Map(menus.map(m => [m.title, m]));
+      (blocks as SessionBlock[] ?? []).forEach((b: SessionBlock) => {
+        if (!b.ground_slot_id) return;
+        const enriched: SessionBlock = {
+          ...b,
+          practice_menu: b.practice_menu ?? menuByTitle.get(b.title),
+        };
+        (map[b.ground_slot_id] ??= []).push(enriched);
+      });
       setSlotBlocksMap(map);
     } else {
       setSlotBlocksMap({});
@@ -200,7 +219,7 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
       .insert({
         session_id: session.id,
         ground_slot_id: slotId,
-        practice_menu_id: menu.id,
+        practice_menu_id: null,
         title: menu.title,
         start_time: slot.start_time,
         end_time: slot.end_time,
@@ -208,10 +227,13 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
         team: slot.team,
         sort_order: existing.length,
       })
-      .select('*, practice_menu:practice_menus(*)')
+      .select('*')
       .single();
     if (data) {
-      setSlotBlocksMap(prev => ({ ...prev, [slotId]: [...(prev[slotId] ?? []), data] }));
+      setSlotBlocksMap(prev => ({
+        ...prev,
+        [slotId]: [...(prev[slotId] ?? []), { ...data, practice_menu: menu }],
+      }));
     }
   }
 
@@ -275,14 +297,27 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
     });
   }
 
-  async function addMenu(m: { title: string; rules: string; points: string; tags: string[] }) {
-    const { data } = await supabase.from('practice_menus').insert(m).select().single();
-    if (data) setMenus(prev => [data, ...prev]);
+  async function addMenu(m: { title: string; description: string; duration: number; category: string }) {
+    const next: PracticeMenu = {
+      id: `local-menu-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      title: m.title,
+      description: m.description,
+      duration: m.duration,
+      category: m.category,
+      rules: m.description,
+      points: `${m.duration}分`,
+      tags: [m.category],
+      created_at: new Date().toISOString(),
+    };
+    setMenus(prev => [next, ...prev]);
   }
 
   async function deleteMenu(id: string) {
-    await supabase.from('practice_menus').delete().eq('id', id);
     setMenus(prev => prev.filter(m => m.id !== id));
+  }
+
+  function updateMenu(id: string, updates: Partial<PracticeMenu>) {
+    setMenus(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
   }
 
   function handleDragStart(e: DragStartEvent) {
@@ -356,6 +391,7 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
             activeTag={activeTag}
             onTagChange={setActiveTag}
             onAddMenu={addMenu}
+            onUpdateMenu={updateMenu}
             onDeleteMenu={deleteMenu}
             sidebarOpen={sidebarOpen}
             onSidebarClose={() => setSidebarOpen(false)}
@@ -366,7 +402,7 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {/* ── Top bar: date, theme, weather ── */}
-        <div className="bg-white border-b border-slate-200 px-4 py-3 flex flex-wrap items-center gap-3 shrink-0">
+        <div className="bg-white border-b border-slate-200 px-4 py-3 flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
           <button
             onClick={onBack}
             className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
@@ -383,7 +419,7 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
             </button>
           )}
 
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 order-2 sm:order-none basis-full sm:basis-auto">
             <h2 className="font-black text-slate-800 text-sm leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
               <span className="hidden sm:inline">{dateLabel}</span>
               <span className="sm:hidden">{dateLabelShort}</span>
@@ -397,7 +433,7 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
             />
           </div>
 
-          <div className="flex items-center gap-0.5 bg-slate-50 border border-slate-200 rounded-lg p-1">
+          <div className="flex items-center gap-0.5 bg-slate-50 border border-slate-200 rounded-lg p-1 order-3 sm:order-none">
             {WEATHER_OPTIONS.map(w => (
               <WeatherBtn key={w} w={w} current={session?.weather ?? null} onClick={() => saveSession({ weather: w })} />
             ))}
@@ -407,7 +443,7 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
             type="date"
             value={activeDate}
             onChange={e => setActiveDate(e.target.value)}
-            className="text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-500 text-slate-600"
+            className="order-4 sm:order-none w-full sm:w-auto text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-500 text-slate-600"
           />
         </div>
 
@@ -620,15 +656,21 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
                       className="w-full text-left p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100"
                     >
                       <p className="text-sm font-semibold text-slate-700">{menu.title}</p>
-                      {menu.tags.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {menu.tags.slice(0, 3).map(tag => (
-                            <span key={tag} className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-slate-200 text-slate-500">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
+                      {menu.description && (
+                        <p className="mt-1 text-xs text-slate-500 line-clamp-2">{menu.description}</p>
                       )}
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        {menu.category && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-slate-200 text-slate-500">
+                            {menu.category}
+                          </span>
+                        )}
+                        {typeof menu.duration === 'number' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-slate-200 text-slate-500">
+                            {menu.duration}分
+                          </span>
+                        )}
+                      </div>
                     </button>
                   ))}
               </div>

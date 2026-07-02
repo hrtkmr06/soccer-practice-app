@@ -177,23 +177,23 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">開始</p>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-full max-w-[170px]">
+                    <p className="text-[10px] font-black text-slate-400 tracking-wide mb-1 text-center">開始</p>
                     <input
                       type="time"
                       value={row.start_time}
                       onChange={e => updateRowTime(row.key, 'start_time', e.target.value)}
-                      className="w-full h-9 px-2 text-xs font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 tabular-nums leading-none"
+                      className="w-full min-w-0 h-8 px-2 text-[11px] font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 tabular-nums leading-none appearance-none"
                     />
                   </div>
-                  <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">終了</p>
+                  <div className="w-full max-w-[170px]">
+                    <p className="text-[10px] font-black text-slate-400 tracking-wide mb-1 text-center">終了</p>
                     <input
                       type="time"
                       value={row.end_time}
                       onChange={e => updateRowTime(row.key, 'end_time', e.target.value)}
-                      className="w-full h-9 px-2 text-xs font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 tabular-nums leading-none"
+                      className="w-full min-w-0 h-8 px-2 text-[11px] font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 tabular-nums leading-none appearance-none"
                     />
                   </div>
                 </div>

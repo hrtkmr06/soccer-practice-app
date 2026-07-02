@@ -185,6 +185,9 @@ function BlockInSlot({
     },
   });
   const menu = block.practice_menu;
+  const parsed = parseMenuDescription(menu?.description ?? menu?.rules ?? '');
+  const ruleText = parsed.rule || menu?.rules || '';
+  const pointText = parsed.point || (menu?.points && !/^\d+分$/.test(menu.points) ? menu.points : '');
 
   return (
     <div
@@ -221,16 +224,16 @@ function BlockInSlot({
       {/* Expanded content */}
       {expanded && (
         <div className="px-3 pb-3 pt-1 border-t border-slate-200 space-y-3 bg-white">
-          {menu?.rules && (
+          {ruleText && (
             <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">ルール</div>
-              <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{menu.rules}</p>
+              <div className="text-[10px] font-bold text-slate-400 tracking-widest mb-1">ルール</div>
+              <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{ruleText}</p>
             </div>
           )}
-          {menu?.points && (
+          {pointText && (
             <div>
-              <div className="text-[10px] font-bold text-green-500 uppercase tracking-widest mb-1">コーチングポイント</div>
-              <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{menu.points}</p>
+              <div className="text-[10px] font-bold text-green-500 tracking-widest mb-1">コーチングポイント</div>
+              <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{pointText}</p>
             </div>
           )}
           {/* Review textarea */}
@@ -254,6 +257,20 @@ function BlockInSlot({
       )}
     </div>
   );
+}
+
+function parseMenuDescription(description: string): { rule: string; point: string } {
+  const normalized = description.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return { rule: '', point: '' };
+
+  const ruleMatch = normalized.match(/【ルール】([\s\S]*?)(?=\n?【(?:ポイント|コーチングポイント)】|$)/);
+  const pointMatch = normalized.match(/【(?:ポイント|コーチングポイント)】([\s\S]*)$/);
+
+  const rule = (ruleMatch?.[1] ?? '').trim();
+  const point = (pointMatch?.[1] ?? '').trim();
+
+  if (rule || point) return { rule, point };
+  return { rule: normalized, point: '' };
 }
 
 export function BlockCardOverlay({ block }: { block: SessionBlock }) {

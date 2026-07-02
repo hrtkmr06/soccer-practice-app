@@ -27,9 +27,12 @@ export default function App() {
   ];
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50 font-sans">
+    <div className="min-h-[100dvh] flex flex-col bg-slate-50 font-sans">
       {/* Top Navigation */}
-      <header className="bg-[#0d2137] text-white shadow-lg z-20 shrink-0">
+      <header
+        className="bg-[#0d2137] text-white shadow-lg z-20 shrink-0"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
         <div className="max-w-screen-2xl mx-auto px-4 flex items-center justify-between h-14">
           {/* Logo */}
           <div className="flex items-center gap-2.5">

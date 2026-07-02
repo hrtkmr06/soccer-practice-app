@@ -5,9 +5,10 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import {
-  PracticeSession, SessionBlock,
+  Menu, PracticeMenu, PracticeSession, SessionBlock,
   TEAM_BADGE, TEAM_SECTION_COLOR, AREA_BADGE, getTagColor,
 } from '../types';
+import menusData from '../menus.json';
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -57,7 +58,15 @@ export default function CalendarView({ onEditSession }: Props) {
           .order('start_time');
         if (blockData) {
           const map: Record<string, SessionBlock[]> = {};
-          (blockData as SessionBlock[]).forEach((b: SessionBlock) => { (map[b.session_id] ??= []).push(b); });
+          const seededMenus = (menusData as Menu[]).map(toPracticeMenu);
+          const menuByTitle = new Map(seededMenus.map(m => [m.title, m]));
+          (blockData as SessionBlock[]).forEach((b: SessionBlock) => {
+            const enriched: SessionBlock = {
+              ...b,
+              practice_menu: b.practice_menu ?? menuByTitle.get(b.title),
+            };
+            (map[b.session_id] ??= []).push(enriched);
+          });
           setBlocksMap(map);
         }
       } else {
@@ -292,7 +301,10 @@ function SessionDetailModal({
                   {blocksByTeam[team].map(block => {
                     const isOpen = expandedBlocks.has(block.id);
                     const menu = block.practice_menu;
-                    const hasDetail = (menu?.rules || menu?.points || block.review);
+                    const parsed = parseMenuDescription(menu?.description ?? menu?.rules ?? '');
+                    const ruleText = parsed.rule || menu?.rules || '';
+                    const pointText = parsed.point || (menu?.points && !/^\d+分$/.test(menu.points) ? menu.points : '');
+                    const hasDetail = Boolean(ruleText || pointText || block.review);
 
                     return (
                       <div key={block.id} className={`rounded-xl border-l-4 border border-slate-200 bg-white overflow-hidden transition-shadow hover:shadow-sm ${TEAM_SECTION_COLOR[team] ? '' : ''}`}>
@@ -310,7 +322,10 @@ function SessionDetailModal({
                               <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${AREA_BADGE[block.area] ?? 'bg-slate-100 text-slate-600'}`}>
                                 {block.area}
                               </span>
-                              {menu?.tags?.slice(0, 2).map(tag => (
+                              {menu?.category && (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getTagColor(menu.category)}`}>{menu.category}</span>
+                              )}
+                              {!menu?.category && menu?.tags?.slice(0, 2).map(tag => (
                                 <span key={tag} className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getTagColor(tag)}`}>{tag}</span>
                               ))}
                             </div>
@@ -323,16 +338,16 @@ function SessionDetailModal({
                         {/* Accordion content */}
                         {isOpen && hasDetail && (
                           <div className="px-4 pb-4 pt-1 border-t border-slate-100 space-y-3 bg-slate-50/50">
-                            {menu?.rules && (
+                            {ruleText && (
                               <div>
-                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">ルール</div>
-                                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{menu.rules}</p>
+                                <div className="text-[10px] font-bold text-slate-400 tracking-widest mb-1">ルール</div>
+                                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{ruleText}</p>
                               </div>
                             )}
-                            {menu?.points && (
+                            {pointText && (
                               <div>
-                                <div className="text-[10px] font-bold text-green-500 uppercase tracking-widest mb-1">コーチングポイント</div>
-                                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{menu.points}</p>
+                                <div className="text-[10px] font-bold text-green-500 tracking-widest mb-1">コーチングポイント</div>
+                                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{pointText}</p>
                               </div>
                             )}
                             {block.review && (
@@ -373,4 +388,32 @@ function SessionDetailModal({
       </div>
     </div>
   );
+}
+
+function toPracticeMenu(menu: Menu, index: number): PracticeMenu {
+  return {
+    id: `json-menu-${index + 1}`,
+    title: menu.title,
+    description: menu.description,
+    duration: menu.duration,
+    category: menu.category,
+    rules: menu.description,
+    points: `${menu.duration}分`,
+    tags: [menu.category],
+    created_at: new Date(0).toISOString(),
+  };
+}
+
+function parseMenuDescription(description: string): { rule: string; point: string } {
+  const normalized = description.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return { rule: '', point: '' };
+
+  const ruleMatch = normalized.match(/【ルール】([\s\S]*?)(?=\n?【(?:ポイント|コーチングポイント)】|$)/);
+  const pointMatch = normalized.match(/【(?:ポイント|コーチングポイント)】([\s\S]*)$/);
+
+  const rule = (ruleMatch?.[1] ?? '').trim();
+  const point = (pointMatch?.[1] ?? '').trim();
+  if (rule || point) return { rule, point };
+
+  return { rule: normalized, point: '' };
 }

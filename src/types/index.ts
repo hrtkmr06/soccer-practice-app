@@ -1,10 +1,27 @@
 export interface PracticeMenu {
   id: string;
   title: string;
+  description?: string | null;
+  duration?: number | null;
+  category?: string | null;
   rules: string | null;
   points: string | null;
   tags: string[];
   created_at: string;
+}
+
+export interface PracticeMenuSeed {
+  title: string;
+  description: string;
+  duration: number;
+  category: string;
+}
+
+export interface Menu {
+  title: string;
+  description: string;
+  duration: number;
+  category: string;
 }
 
 export interface PracticeSession {
