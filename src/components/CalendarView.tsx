@@ -213,6 +213,16 @@ export default function CalendarView({ onEditSession }: Props) {
           onClose={() => setSelected(null)}
           onEdit={() => { setSelected(null); onEditSession(selected.date); }}
           onDelete={() => deleteSession(selected.id)}
+          onUpdateBlockReview={async (blockId, review) => {
+            await supabase.from('session_blocks').update({ review }).eq('id', blockId);
+            setBlocksMap(prev => {
+              const next: Record<string, SessionBlock[]> = {};
+              Object.entries(prev).forEach(([sessionId, list]) => {
+                next[sessionId] = list.map(b => b.id === blockId ? { ...b, review } : b);
+              });
+              return next;
+            });
+          }}
         />
       )}
     </div>
@@ -229,15 +239,19 @@ function formatLocalDate(date: Date): string {
 /* ── Session Detail Modal ── */
 
 function SessionDetailModal({
-  session, blocks, onClose, onEdit, onDelete,
+  session, blocks, onClose, onEdit, onDelete, onUpdateBlockReview,
 }: {
   session: PracticeSession;
   blocks: SessionBlock[];
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onUpdateBlockReview: (blockId: string, review: string) => Promise<void>;
 }) {
   const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set());
+  const [activeTeam, setActiveTeam] = useState<string>('');
+  const [teamThemes, setTeamThemes] = useState<Record<string, string>>({});
+  const [reviewDrafts, setReviewDrafts] = useState<Record<string, string>>({});
 
   function toggleBlock(id: string) {
     setExpandedBlocks(prev => {
@@ -258,6 +272,31 @@ function SessionDetailModal({
   const teams = TEAM_ORDER.filter(t => blocksByTeam[t]?.length);
   // Add any teams not in TEAM_ORDER
   Object.keys(blocksByTeam).forEach(t => { if (!TEAM_ORDER.includes(t)) teams.push(t); });
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`practice-team-themes:${session.date}`);
+      setTeamThemes(raw ? JSON.parse(raw) as Record<string, string> : {});
+    } catch {
+      setTeamThemes({});
+    }
+  }, [session.date]);
+
+  useEffect(() => {
+    if (teams.length === 0) {
+      setActiveTeam('');
+      return;
+    }
+    if (!activeTeam || !teams.includes(activeTeam)) {
+      setActiveTeam(teams[0]);
+    }
+  }, [teams, activeTeam]);
+
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    blocks.forEach((b) => { next[b.id] = b.review ?? ''; });
+    setReviewDrafts(next);
+  }, [blocks]);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={onClose}>
@@ -292,87 +331,125 @@ function SessionDetailModal({
           {blocks.length === 0 ? (
             <p className="text-slate-400 text-sm text-center py-8">練習ブロックが登録されていません</p>
           ) : (
-            teams.map(team => (
-              <div key={team}>
-                {/* Team header */}
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${TEAM_BADGE[team] ?? 'bg-slate-200 text-slate-700'}`}>
-                    {team}
-                  </span>
-                  <div className="flex-1 h-px bg-slate-200" />
-                  <span className="text-xs text-slate-400">{blocksByTeam[team].length} メニュー</span>
-                </div>
-
-                {/* Blocks for this team */}
-                <div className="space-y-2">
-                  {blocksByTeam[team].map(block => {
-                    const isOpen = expandedBlocks.has(block.id);
-                    const menu = block.practice_menu;
-                    const parsed = parseMenuDescription(menu?.description ?? menu?.rules ?? '');
-                    const ruleText = parsed.rule || menu?.rules || '';
-                    const pointText = parsed.point || (menu?.points && !/^\d+分$/.test(menu.points) ? menu.points : '');
-                    const hasDetail = Boolean(ruleText || pointText || block.review);
-
+            <>
+              <div className="overflow-x-auto -mx-1 px-1">
+                <div className="flex items-center gap-1 min-w-max">
+                  {teams.map(team => {
+                    const isActive = activeTeam === team;
                     return (
-                      <div key={block.id} className={`rounded-xl border-l-4 border border-slate-200 bg-white overflow-hidden transition-shadow hover:shadow-sm ${TEAM_SECTION_COLOR[team] ? '' : ''}`}>
-                        {/* Block row */}
-                        <button
-                          onClick={() => hasDetail && toggleBlock(block.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 text-left ${hasDetail ? 'cursor-pointer' : 'cursor-default'}`}
-                        >
-                          <div className="text-xs font-mono text-slate-400 w-20 shrink-0">
-                            {block.start_time}–{block.end_time}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-slate-800 text-sm">{block.title}</div>
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${AREA_BADGE[block.area] ?? 'bg-slate-100 text-slate-600'}`}>
-                                {block.area}
-                              </span>
-                              {menu?.category && (
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getTagColor(menu.category)}`}>{menu.category}</span>
-                              )}
-                              {!menu?.category && menu?.tags?.slice(0, 2).map(tag => (
-                                <span key={tag} className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getTagColor(tag)}`}>{tag}</span>
-                              ))}
-                            </div>
-                          </div>
-                          {hasDetail && (
-                            <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-                          )}
-                        </button>
-
-                        {/* Accordion content */}
-                        {isOpen && hasDetail && (
-                          <div className="px-4 pb-4 pt-1 border-t border-slate-100 space-y-3 bg-slate-50/50">
-                            {ruleText && (
-                              <div>
-                                <div className="text-[10px] font-bold text-slate-400 tracking-widest mb-1">ルール</div>
-                                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{ruleText}</p>
-                              </div>
-                            )}
-                            {pointText && (
-                              <div>
-                                <div className="text-[10px] font-bold text-green-500 tracking-widest mb-1">コーチングポイント</div>
-                                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{pointText}</p>
-                              </div>
-                            )}
-                            {block.review && (
-                              <div>
-                                <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-                                  <MessageSquare className="w-3 h-3" /> 総評
-                                </div>
-                                <p className="text-sm text-slate-600 italic leading-relaxed">「{block.review}」</p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      <button
+                        key={team}
+                        onClick={() => setActiveTeam(team)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
+                          isActive
+                            ? 'bg-green-600 text-white'
+                            : `${TEAM_BADGE[team] ?? 'bg-slate-100 text-slate-600'} hover:opacity-85`
+                        }`}
+                      >
+                        {team} ({blocksByTeam[team].length})
+                      </button>
                     );
                   })}
                 </div>
               </div>
-            ))
+
+              {activeTeam && (
+                <div key={activeTeam}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${TEAM_BADGE[activeTeam] ?? 'bg-slate-200 text-slate-700'}`}>
+                      {activeTeam}
+                    </span>
+                    <div className="flex-1 h-px bg-slate-200" />
+                    <span className="text-xs text-slate-400">{blocksByTeam[activeTeam].length} メニュー</span>
+                  </div>
+
+                  {teamThemes[activeTeam] && (
+                    <div className="mb-2.5 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+                      <p className="text-[10px] font-bold text-green-600 uppercase tracking-widest mb-1">{activeTeam} のテーマ</p>
+                      <p className="text-sm text-green-800 leading-relaxed">{teamThemes[activeTeam]}</p>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    {blocksByTeam[activeTeam].map(block => {
+                      const isOpen = expandedBlocks.has(block.id);
+                      const menu = block.practice_menu;
+                      const parsed = parseMenuDescription(menu?.description ?? menu?.rules ?? '');
+                      const ruleText = parsed.rule || menu?.rules || '';
+                      const pointText = parsed.point || (menu?.points && !/^\d+分$/.test(menu.points) ? menu.points : '');
+                      const hasDetail = Boolean(ruleText || pointText || block.review);
+
+                      return (
+                        <div key={block.id} className={`rounded-xl border-l-4 border border-slate-200 bg-white overflow-hidden transition-shadow hover:shadow-sm ${TEAM_SECTION_COLOR[activeTeam] ? '' : ''}`}>
+                          <button
+                            onClick={() => hasDetail && toggleBlock(block.id)}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 text-left ${hasDetail ? 'cursor-pointer' : 'cursor-default'}`}
+                          >
+                            <div className="text-xs font-mono text-slate-400 w-20 shrink-0">
+                              {block.start_time}–{block.end_time}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-slate-800 text-sm">{block.title}</div>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${AREA_BADGE[block.area] ?? 'bg-slate-100 text-slate-600'}`}>
+                                  {block.area}
+                                </span>
+                                {menu?.category && (
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getTagColor(menu.category)}`}>{menu.category}</span>
+                                )}
+                                {!menu?.category && menu?.tags?.slice(0, 2).map(tag => (
+                                  <span key={tag} className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getTagColor(tag)}`}>{tag}</span>
+                                ))}
+                              </div>
+                            </div>
+                            {hasDetail && (
+                              <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                            )}
+                          </button>
+
+                          {isOpen && hasDetail && (
+                            <div className="px-4 pb-4 pt-1 border-t border-slate-100 space-y-3 bg-slate-50/50">
+                              {ruleText && (
+                                <div>
+                                  <div className="text-[10px] font-bold text-slate-400 tracking-widest mb-1">ルール</div>
+                                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{ruleText}</p>
+                                </div>
+                              )}
+                              {pointText && (
+                                <div>
+                                  <div className="text-[10px] font-bold text-green-500 tracking-widest mb-1">コーチングポイント</div>
+                                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{pointText}</p>
+                                </div>
+                              )}
+                              <div>
+                                <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                                  <MessageSquare className="w-3 h-3" /> 留意点
+                                </div>
+                                <textarea
+                                  value={reviewDrafts[block.id] ?? ''}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    setReviewDrafts(prev => ({ ...prev, [block.id]: value }));
+                                  }}
+                                  onBlur={() => {
+                                    const draft = reviewDrafts[block.id] ?? '';
+                                    if (draft === (block.review ?? '')) return;
+                                    void onUpdateBlockReview(block.id, draft);
+                                  }}
+                                  rows={2}
+                                  placeholder="この練習での留意点を記入..."
+                                  className="w-full px-2.5 py-2 text-sm text-slate-700 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-none placeholder-slate-300"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 

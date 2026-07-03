@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { ChevronDown, Trash2, MessageSquare, Edit3, Check } from 'lucide-react';
 import { GroundSlot, SessionBlock, AREA_LEFT_BORDER, AREA_BADGE, TEAM_BADGE, TEAMS, AREAS, getTagColor } from '../types';
@@ -185,9 +185,20 @@ function BlockInSlot({
     },
   });
   const menu = block.practice_menu;
+  const [reviewDraft, setReviewDraft] = useState(block.review ?? '');
   const parsed = parseMenuDescription(menu?.description ?? menu?.rules ?? '');
   const ruleText = parsed.rule || menu?.rules || '';
   const pointText = parsed.point || (menu?.points && !/^\d+分$/.test(menu.points) ? menu.points : '');
+
+  useEffect(() => {
+    setReviewDraft(block.review ?? '');
+  }, [block.id, block.review]);
+
+  function commitReviewIfChanged() {
+    const current = block.review ?? '';
+    if (reviewDraft === current) return;
+    onUpdate({ review: reviewDraft });
+  }
 
   return (
     <div
@@ -243,8 +254,9 @@ function BlockInSlot({
             </div>
             <textarea
               placeholder="練習後の感想・気づきを記録..."
-              value={block.review ?? ''}
-              onChange={e => onUpdate({ review: e.target.value })}
+              value={reviewDraft}
+              onChange={e => setReviewDraft(e.target.value)}
+              onBlur={commitReviewIfChanged}
               rows={2}
               className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-none placeholder-slate-300 bg-slate-50"
             />

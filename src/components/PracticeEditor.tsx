@@ -55,6 +55,7 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
   const [mobileMenuPickerSlotId, setMobileMenuPickerSlotId] = useState<string | null>(null);
   const [mobileMenuQuery, setMobileMenuQuery] = useState('');
   const [activeTeam, setActiveTeam] = useState<string>('Aチーム');
+  const [teamThemes, setTeamThemes] = useState<Record<string, string>>({});
   const [subView, setSubView] = useState<'menu' | 'whiteboard'>('menu');
 
   const sensors = useSensors(
@@ -64,6 +65,14 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
 
   useEffect(() => { fetchMenus(); }, []);
   useEffect(() => { fetchSession(); }, [activeDate, menus]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`practice-team-themes:${activeDate}`);
+      setTeamThemes(raw ? JSON.parse(raw) as Record<string, string> : {});
+    } catch {
+      setTeamThemes({});
+    }
+  }, [activeDate]);
 
   async function fetchMenus() {
     const seedMenus = (menusJson as Menu[]).map((m, index) => ({
@@ -320,6 +329,14 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
     setMenus(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
   }
 
+  function saveTeamTheme(team: string, value: string) {
+    setTeamThemes(prev => {
+      const next = { ...prev, [team]: value };
+      localStorage.setItem(`practice-team-themes:${activeDate}`, JSON.stringify(next));
+      return next;
+    });
+  }
+
   function handleDragStart(e: DragStartEvent) {
     const data = e.active.data.current as DragData | undefined;
     if (!data) return;
@@ -506,30 +523,47 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
               </div>
 
               {tabs.length > 0 && (
-                <div className="flex items-end gap-0 px-4 overflow-x-auto">
-                  {tabs.map(team => {
-                    const slotCount = groundSlots.filter(s => s.team === team).length;
-                    const isActive = activeTeam === team;
-                    return (
-                      <button
-                        key={team}
-                        onClick={() => setActiveTeam(team)}
-                        className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition-all whitespace-nowrap ${
-                          isActive
-                            ? 'border-green-600 text-green-700 bg-green-50/50'
-                            : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center ${TEAM_BADGE[team] ?? 'bg-slate-200 text-slate-700'}`}>
-                          {team.charAt(0)}
-                        </span>
-                        {team}
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
-                          {slotCount}
-                        </span>
-                      </button>
-                    );
-                  })}
+                <div className="px-4 pb-2">
+                  <div className="flex items-end gap-0 overflow-x-auto">
+                    {tabs.map(team => {
+                      const slotCount = groundSlots.filter(s => s.team === team).length;
+                      const isActive = activeTeam === team;
+                      return (
+                        <button
+                          key={team}
+                          onClick={() => setActiveTeam(team)}
+                          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition-all whitespace-nowrap ${
+                            isActive
+                              ? 'border-green-600 text-green-700 bg-green-50/50'
+                              : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center ${TEAM_BADGE[team] ?? 'bg-slate-200 text-slate-700'}`}>
+                            {team.charAt(0)}
+                          </span>
+                          {team}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {slotCount}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {activeTeam && (
+                    <div className="mt-2">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                        {activeTeam} のテーマ
+                      </label>
+                      <input
+                        type="text"
+                        value={teamThemes[activeTeam] ?? ''}
+                        onChange={e => saveTeamTheme(activeTeam, e.target.value)}
+                        placeholder={`${activeTeam} の狙いを入力...`}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 text-slate-700 placeholder-slate-300"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
               </div>
