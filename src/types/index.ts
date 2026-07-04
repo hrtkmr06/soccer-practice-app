@@ -30,6 +30,12 @@ export interface PracticeSession {
   overall_theme: string | null;
   weather: string | null;
   notes: string | null;
+  event_type?: '練習' | 'トレーニングマッチ' | '公式戦' | null;
+  opponent?: string | null;
+  match_category?: string | null;
+  competition?: string | null;
+  venue?: string | null;
+  kick_off?: string | null;
   created_at: string;
 }
 

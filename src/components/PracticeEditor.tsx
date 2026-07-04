@@ -56,6 +56,14 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
   const [mobileMenuQuery, setMobileMenuQuery] = useState('');
   const [activeTeam, setActiveTeam] = useState<string>('Aチーム');
   const [teamThemes, setTeamThemes] = useState<Record<string, string>>({});
+  const [eventMode, setEventMode] = useState<'練習' | '試合'>('練習');
+  const [matchDraft, setMatchDraft] = useState({
+    event_type: 'トレーニングマッチ' as 'トレーニングマッチ' | '公式戦',
+    opponent: '',
+    venue: '',
+    kick_off: '',
+    competition: '',
+  });
   const [subView, setSubView] = useState<'menu' | 'whiteboard'>('menu');
 
   const sensors = useSensors(
@@ -73,6 +81,18 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
       setTeamThemes({});
     }
   }, [activeDate]);
+  useEffect(() => {
+    if (!session) return;
+    const isMatch = session.event_type === 'トレーニングマッチ' || session.event_type === '公式戦';
+    setEventMode(isMatch ? '試合' : '練習');
+    setMatchDraft({
+      event_type: session.event_type === '公式戦' ? '公式戦' : 'トレーニングマッチ',
+      opponent: session.opponent ?? '',
+      venue: session.venue ?? '',
+      kick_off: session.kick_off ?? '',
+      competition: session.competition ?? '',
+    });
+  }, [session?.id, session?.event_type, session?.opponent, session?.venue, session?.kick_off, session?.competition]);
 
   async function fetchMenus() {
     const seedMenus = (menusJson as Menu[]).map((m, index) => ({
@@ -95,7 +115,7 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
 
     const sess = existing ?? await (async () => {
       const { data } = await supabase
-        .from('practice_sessions').insert({ date: activeDate, weather: '晴れ' }).select().single();
+        .from('practice_sessions').insert({ date: activeDate, weather: '晴れ', event_type: '練習' }).select().single();
       return data;
     })();
     if (!sess) return;
@@ -337,6 +357,42 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
     });
   }
 
+  async function saveEventMode(nextMode: '練習' | '試合') {
+    setEventMode(nextMode);
+    if (nextMode === '練習') {
+      await saveSession({
+        event_type: '練習',
+        opponent: null,
+        match_category: null,
+        competition: null,
+        venue: null,
+        kick_off: null,
+      });
+      return;
+    }
+    await saveSession({
+      event_type: matchDraft.event_type,
+      opponent: matchDraft.opponent || null,
+      match_category: matchDraft.event_type === '公式戦' ? '公式戦' : '練習試合',
+      competition: matchDraft.event_type === '公式戦' ? (matchDraft.competition || '') : null,
+      venue: matchDraft.venue || null,
+      kick_off: matchDraft.kick_off || null,
+    });
+  }
+
+  async function saveMatchField<K extends keyof typeof matchDraft>(key: K, value: (typeof matchDraft)[K]) {
+    setMatchDraft(prev => ({ ...prev, [key]: value }));
+    const next = { ...matchDraft, [key]: value };
+    await saveSession({
+      event_type: next.event_type,
+      opponent: next.opponent || null,
+      match_category: next.event_type === '公式戦' ? '公式戦' : '練習試合',
+      competition: next.event_type === '公式戦' ? (next.competition || '') : null,
+      venue: next.venue || null,
+      kick_off: next.kick_off || null,
+    });
+  }
+
   function handleDragStart(e: DragStartEvent) {
     const data = e.active.data.current as DragData | undefined;
     if (!data) return;
@@ -441,13 +497,6 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
               <span className="hidden sm:inline">{dateLabel}</span>
               <span className="sm:hidden">{dateLabelShort}</span>
             </h2>
-            <input
-              type="text"
-              placeholder="全体テーマを入力..."
-              value={session?.overall_theme ?? ''}
-              onChange={e => saveSession({ overall_theme: e.target.value })}
-              className="mt-0.5 text-sm text-slate-500 bg-transparent border-none outline-none w-full placeholder-slate-300"
-            />
           </div>
 
           <div className="flex items-center gap-0.5 bg-slate-50 border border-slate-200 rounded-lg p-1 order-3 sm:order-none">
@@ -462,6 +511,92 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
             onChange={e => setActiveDate(e.target.value)}
             className="order-4 sm:order-none w-full sm:w-auto text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-500 text-slate-600"
           />
+        </div>
+
+        {/* ── Match / event metadata ── */}
+        <div className="bg-white border-b border-slate-200 px-4 py-3 shrink-0">
+          <div className="flex items-center gap-2 mb-2">
+            <button
+              onClick={() => { void saveEventMode('練習'); }}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                eventMode === '練習' ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              練習
+            </button>
+            <button
+              onClick={() => { void saveEventMode('試合'); }}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                eventMode === '試合' ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              試合
+            </button>
+          </div>
+
+          {eventMode === '試合' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">試合種別</label>
+              <select
+                value={matchDraft.event_type}
+                onChange={e => { void saveMatchField('event_type', e.target.value as 'トレーニングマッチ' | '公式戦'); }}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="トレーニングマッチ">トレーニングマッチ</option>
+                <option value="公式戦">公式戦</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">対戦相手</label>
+              <input
+                type="text"
+                value={matchDraft.opponent}
+                onChange={e => setMatchDraft(prev => ({ ...prev, opponent: e.target.value }))}
+                onBlur={e => { void saveMatchField('opponent', e.target.value); }}
+                placeholder="例: ○○高校"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-slate-300"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">場所</label>
+              <input
+                type="text"
+                value={matchDraft.venue}
+                onChange={e => setMatchDraft(prev => ({ ...prev, venue: e.target.value }))}
+                onBlur={e => { void saveMatchField('venue', e.target.value); }}
+                placeholder="例: ○○グラウンド"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-slate-300"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">キックオフ</label>
+              <input
+                type="time"
+                value={matchDraft.kick_off}
+                onChange={e => setMatchDraft(prev => ({ ...prev, kick_off: e.target.value }))}
+                onBlur={e => { void saveMatchField('kick_off', e.target.value); }}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">大会名（公式戦）</label>
+              <input
+                type="text"
+                value={matchDraft.competition}
+                onChange={e => setMatchDraft(prev => ({ ...prev, competition: e.target.value }))}
+                onBlur={e => { void saveMatchField('competition', e.target.value); }}
+                placeholder="例: 高円宮杯 県予選"
+                disabled={matchDraft.event_type !== '公式戦'}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-slate-100 disabled:text-slate-400 placeholder-slate-300"
+              />
+            </div>
+          </div>
+          )}
         </div>
 
         {/* ── Sub tabs: メニュー作成 / ホワイトボード ── */}

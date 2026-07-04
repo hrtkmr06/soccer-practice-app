@@ -169,10 +169,14 @@ export default function CalendarView({ onEditSession }: Props) {
 
                     {session && (
                       <div className="space-y-0.5">
-                        {session.overall_theme && (
-                          <div className="flex items-center gap-0.5 px-1 py-0.5 bg-green-100 text-green-800 rounded text-[10px] sm:text-[11px] font-semibold truncate">
-                            <WeatherIcon w={session.weather} />
-                            <span className="truncate ml-0.5">{session.overall_theme}</span>
+                        <div className="flex items-center gap-0.5 px-1 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] sm:text-[11px] font-semibold truncate">
+                          <WeatherIcon w={session.weather} />
+                          <span className="truncate ml-0.5">{session.event_type ?? '練習'}</span>
+                          {session.opponent && <span className="truncate ml-1">vs {session.opponent}</span>}
+                        </div>
+                        {(session.venue || session.kick_off) && (
+                          <div className="px-1 text-[10px] text-slate-400 truncate hidden sm:block">
+                            {session.kick_off ? `${session.kick_off} ` : ''}{session.venue ?? ''}
                           </div>
                         )}
                         {blocks.slice(0, 2).map(b => (
@@ -183,7 +187,7 @@ export default function CalendarView({ onEditSession }: Props) {
                         {blocks.length > 2 && (
                           <div className="text-[10px] text-slate-400 hidden sm:block pl-1">+{blocks.length - 2} 件</div>
                         )}
-                        {!session.overall_theme && blocks.length === 0 && (
+                        {blocks.length === 0 && (
                           <div className="flex gap-0.5 pl-0.5"><div className="w-1.5 h-1.5 rounded-full bg-green-400" /></div>
                         )}
                       </div>
@@ -317,8 +321,17 @@ function SessionDetailModal({
               <span>{dateLabel}</span>
             </div>
             <h3 className="text-lg font-black text-slate-800 leading-tight">
-              {session.overall_theme ?? '（テーマ未設定）'}
+              {session.event_type ?? '練習'}
+              {session.opponent ? ` vs ${session.opponent}` : ''}
             </h3>
+            {(session.match_category || session.competition || session.venue || session.kick_off) && (
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                {session.match_category ? `${session.match_category} ` : ''}
+                {session.competition ? `${session.competition} ` : ''}
+                {session.kick_off ? `${session.kick_off} ` : ''}
+                {session.venue ?? ''}
+              </p>
+            )}
             {session.notes && <p className="text-xs text-slate-500 mt-1 leading-relaxed">{session.notes}</p>}
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 shrink-0">
