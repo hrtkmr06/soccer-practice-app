@@ -191,6 +191,7 @@ export default function FreeformBoard({ date }: Props) {
   const [search, setSearch] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', category: 'Aチーム' as Category, grade: '1年' as Grade });
+  const [bulkForm, setBulkForm] = useState({ names: '', category: 'Aチーム' as Category, grade: '1年' as Grade });
   const [gradeByPlayerId, setGradeByPlayerId] = useState<Record<string, Grade>>({});
   const [bulkCategory, setBulkCategory] = useState<Category>('Aチーム');
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
@@ -316,6 +317,66 @@ export default function FreeformBoard({ date }: Props) {
     });
 
     setAddForm({ name: '', category: 'Aチーム', grade: '1年' });
+    setShowAddForm(false);
+    setFormError('');
+  }
+
+  async function addPlayersBulk() {
+    const names = bulkForm.names
+      .split('\n')
+      .map((name) => name.trim())
+      .filter(Boolean);
+
+    if (names.length === 0) {
+      setFormError('一括追加する選手名を1人以上入力してください');
+      return;
+    }
+
+    const uniqueNames = new Set<string>();
+    for (const name of names) {
+      const error = validateName(name);
+      if (error) {
+        setFormError(`「${name}」: ${error}`);
+        return;
+      }
+      const normalized = normalizeName(name);
+      if (uniqueNames.has(normalized)) {
+        setFormError(`一括入力内で同じ名前があります: ${name}`);
+        return;
+      }
+      uniqueNames.add(normalized);
+    }
+
+    const maxNumber = players.reduce((max, p) => Math.max(max, p.number ?? 0), 0);
+    const payload = names.map((name, index) => ({
+      name,
+      number: maxNumber + index + 1,
+      team: bulkForm.category,
+      original_team: bulkForm.category,
+    }));
+
+    const { data } = await supabase
+      .from('players')
+      .insert(payload)
+      .select();
+
+    if (!data) return;
+    const rows = data as RawPlayer[];
+    setPlayers((prev) => [...prev, ...rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      number: r.number,
+      defaultTeam: r.originalTeam ?? r.original_team ?? r.team,
+    }))].sort((a, b) => a.number - b.number));
+    setGradeByPlayerId((prev) => {
+      const next = { ...prev };
+      rows.forEach((row) => {
+        next[row.id] = bulkForm.grade;
+      });
+      savePlayerGrades(next);
+      return next;
+    });
+    setBulkForm({ names: '', category: 'Aチーム', grade: '1年' });
     setShowAddForm(false);
     setFormError('');
   }
@@ -497,33 +558,70 @@ export default function FreeformBoard({ date }: Props) {
         </div>
 
         {showAddForm && (
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_140px_110px_100px] gap-2">
-            <input
-              value={addForm.name}
-              onChange={(e) => setAddForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="選手名"
-              className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-            <select
-              value={addForm.category}
-              onChange={(e) => setAddForm(f => ({ ...f, category: e.target.value as Category }))}
-              className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select
-              value={addForm.grade}
-              onChange={(e) => setAddForm(f => ({ ...f, grade: e.target.value as Grade }))}
-              className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              {GRADE_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-            <button
-              onClick={addPlayer}
-              className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
-            >
-              追加
-            </button>
+          <div className="mt-3 space-y-3">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">単体追加</p>
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_110px_100px] gap-2">
+                <input
+                  value={addForm.name}
+                  onChange={(e) => setAddForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="選手名"
+                  className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+                <select
+                  value={addForm.category}
+                  onChange={(e) => setAddForm(f => ({ ...f, category: e.target.value as Category }))}
+                  className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select
+                  value={addForm.grade}
+                  onChange={(e) => setAddForm(f => ({ ...f, grade: e.target.value as Grade }))}
+                  className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  {GRADE_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+                <button
+                  onClick={addPlayer}
+                  className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+                >
+                  追加
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">一括追加（改行区切り）</p>
+              <textarea
+                value={bulkForm.names}
+                onChange={(e) => setBulkForm(f => ({ ...f, names: e.target.value }))}
+                placeholder={`例:\n山田太郎\n佐藤次郎\n鈴木三郎`}
+                className="w-full min-h-28 px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-[140px_110px_100px] gap-2 sm:justify-end">
+                <select
+                  value={bulkForm.category}
+                  onChange={(e) => setBulkForm(f => ({ ...f, category: e.target.value as Category }))}
+                  className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select
+                  value={bulkForm.grade}
+                  onChange={(e) => setBulkForm(f => ({ ...f, grade: e.target.value as Grade }))}
+                  className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  {GRADE_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+                <button
+                  onClick={addPlayersBulk}
+                  className="px-3 py-2 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700"
+                >
+                  一括追加
+                </button>
+              </div>
+            </div>
           </div>
         )}
         {formError && (
