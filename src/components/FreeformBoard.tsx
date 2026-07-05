@@ -26,6 +26,9 @@ interface Props {
 
 const CATEGORIES = ['Aチーム', 'Bチーム', 'Cチーム', '一年生', '欠席'] as const;
 type Category = typeof CATEGORIES[number];
+const GRADE_OPTIONS = ['1年', '2年', '3年', 'スタッフ'] as const;
+type Grade = typeof GRADE_OPTIONS[number];
+const PLAYER_GRADE_STORAGE_KEY = 'practice-player-grades';
 
 const CATEGORY_BADGE: Record<Category, string> = {
   'Aチーム': 'bg-slate-900 text-white',
@@ -37,6 +40,23 @@ const CATEGORY_BADGE: Record<Category, string> = {
 
 function storageKey(date: string) {
   return `practice-category-assignment:${date}`;
+}
+
+function loadPlayerGrades(): Record<string, Grade> {
+  try {
+    const raw = localStorage.getItem(PLAYER_GRADE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) => GRADE_OPTIONS.includes(value as Grade))
+    ) as Record<string, Grade>;
+  } catch {
+    return {};
+  }
+}
+
+function savePlayerGrades(next: Record<string, Grade>) {
+  localStorage.setItem(PLAYER_GRADE_STORAGE_KEY, JSON.stringify(next));
 }
 
 function DroppableCategory({
@@ -79,6 +99,7 @@ function DroppableCategory({
 function DraggablePlayerCard({
   player,
   category,
+  grade,
   selected,
   onToggleSelect,
   onEdit,
@@ -86,6 +107,7 @@ function DraggablePlayerCard({
 }: {
   player: Player;
   category: Category;
+  grade: string;
   selected: boolean;
   onToggleSelect: (playerId: string) => void;
   onEdit: (player: Player) => void;
@@ -108,7 +130,10 @@ function DraggablePlayerCard({
     >
       <div className="flex items-center justify-between gap-2.5">
         <span className={`w-6 h-6 rounded-full shrink-0 ${CATEGORY_BADGE[category]}`} />
-        <span className="text-sm font-semibold text-slate-700 leading-tight break-words">{player.name}</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-slate-700 leading-tight break-words">{player.name}</p>
+          {grade ? <p className="text-[11px] text-slate-500">{grade}</p> : null}
+        </div>
         <div className="flex items-center gap-1 ml-auto">
           <button
             onPointerDown={(e) => e.stopPropagation()}
@@ -145,12 +170,15 @@ function DraggablePlayerCard({
   );
 }
 
-function PlayerCardOverlay({ player }: { player: Player }) {
+function PlayerCardOverlay({ player, grade }: { player: Player; grade: string }) {
   return (
     <div className="border border-green-400 ring-2 ring-green-200 rounded-xl p-3 bg-white shadow-lg select-none w-[260px] md:w-[280px]">
       <div className="flex items-center gap-2.5">
         <span className="w-6 h-6 rounded-full shrink-0 bg-green-600" />
-        <span className="text-sm font-semibold text-slate-700 break-words">{player.name}</span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-700 break-words">{player.name}</p>
+          {grade ? <p className="text-[11px] text-slate-500">{grade}</p> : null}
+        </div>
       </div>
     </div>
   );
@@ -162,17 +190,22 @@ export default function FreeformBoard({ date }: Props) {
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addForm, setAddForm] = useState({ name: '', category: 'Aチーム' as Category });
+  const [addForm, setAddForm] = useState({ name: '', category: 'Aチーム' as Category, grade: '1年' as Grade });
+  const [gradeByPlayerId, setGradeByPlayerId] = useState<Record<string, Grade>>({});
   const [bulkCategory, setBulkCategory] = useState<Category>('Aチーム');
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [editName, setEditName] = useState('');
+  const [editGrade, setEditGrade] = useState<Grade>('1年');
   const [formError, setFormError] = useState('');
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileCategory, setMobileCategory] = useState<Category>('Aチーム');
 
   useEffect(() => { void fetchPlayers(); }, []);
+  useEffect(() => {
+    setGradeByPlayerId(loadPlayerGrades());
+  }, []);
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
     const apply = () => setIsMobile(mq.matches);
@@ -222,6 +255,13 @@ export default function FreeformBoard({ date }: Props) {
     return name.trim().toLowerCase();
   }
 
+  function resolveGrade(player: Player): string {
+    const grade = gradeByPlayerId[player.id];
+    if (grade) return grade;
+    if (player.defaultTeam === '一年生') return '1年';
+    return '学年未設定';
+  }
+
   function validateName(name: string, currentId?: string): string | null {
     const trimmed = name.trim();
     if (!trimmed) return '選手名を入力してください';
@@ -269,8 +309,13 @@ export default function FreeformBoard({ date }: Props) {
       number: r.number,
       defaultTeam: r.originalTeam ?? r.original_team ?? r.team,
     }].sort((a, b) => a.number - b.number));
+    setGradeByPlayerId((prev) => {
+      const next = { ...prev, [r.id]: addForm.grade };
+      savePlayerGrades(next);
+      return next;
+    });
 
-    setAddForm({ name: '', category: 'Aチーム' });
+    setAddForm({ name: '', category: 'Aチーム', grade: '1年' });
     setShowAddForm(false);
     setFormError('');
   }
@@ -278,6 +323,7 @@ export default function FreeformBoard({ date }: Props) {
   function startEditPlayer(player: Player) {
     setEditingPlayer(player);
     setEditName(player.name);
+    setEditGrade((gradeByPlayerId[player.id] ?? (player.defaultTeam === '一年生' ? '1年' : '1年')) as Grade);
     setFormError('');
   }
 
@@ -290,8 +336,14 @@ export default function FreeformBoard({ date }: Props) {
     }
     await supabase.from('players').update({ name: editName.trim() }).eq('id', editingPlayer.id);
     setPlayers(prev => prev.map(p => p.id === editingPlayer.id ? { ...p, name: editName.trim() } : p));
+    setGradeByPlayerId((prev) => {
+      const next = { ...prev, [editingPlayer.id]: editGrade };
+      savePlayerGrades(next);
+      return next;
+    });
     setEditingPlayer(null);
     setEditName('');
+    setEditGrade('1年');
     setFormError('');
   }
 
@@ -299,6 +351,13 @@ export default function FreeformBoard({ date }: Props) {
     await supabase.from('players').delete().eq('id', player.id);
     setPlayers(prev => prev.filter(p => p.id !== player.id));
     setSelectedPlayerIds(prev => prev.filter(id => id !== player.id));
+    setGradeByPlayerId((prev) => {
+      if (!(player.id in prev)) return prev;
+      const next = { ...prev };
+      delete next[player.id];
+      savePlayerGrades(next);
+      return next;
+    });
     const next = { ...assignments };
     delete next[player.id];
     saveAssignments(next);
@@ -438,7 +497,7 @@ export default function FreeformBoard({ date }: Props) {
         </div>
 
         {showAddForm && (
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_140px_100px] gap-2">
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_140px_110px_100px] gap-2">
             <input
               value={addForm.name}
               onChange={(e) => setAddForm(f => ({ ...f, name: e.target.value }))}
@@ -451,6 +510,13 @@ export default function FreeformBoard({ date }: Props) {
               className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select
+              value={addForm.grade}
+              onChange={(e) => setAddForm(f => ({ ...f, grade: e.target.value as Grade }))}
+              className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              {GRADE_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
             </select>
             <button
               onClick={addPlayer}
@@ -507,18 +573,21 @@ export default function FreeformBoard({ date }: Props) {
                   <p className="text-xs text-slate-300 px-2 py-4 text-center">該当選手なし</p>
                 ) : (
                   grouped[mobileCategory].map((p) => (
-                    <div
-                      key={p.id}
-                      className={`border rounded-xl p-3 bg-slate-50 select-none transition-shadow ${
+                      <div
+                        key={p.id}
+                        className={`border rounded-xl p-3 bg-slate-50 select-none transition-shadow ${
                         selectedPlayerIds.includes(p.id)
                           ? 'border-green-500 ring-2 ring-green-100'
                           : 'border-slate-200'
                       }`}
-                    >
-                      <div className="flex items-center justify-between gap-2.5">
-                        <span className={`w-6 h-6 rounded-full shrink-0 ${CATEGORY_BADGE[mobileCategory]}`} />
-                        <span className="text-sm font-semibold text-slate-700 leading-tight break-words">{p.name}</span>
-                        <div className="flex items-center gap-1 ml-auto">
+                      >
+                        <div className="flex items-center justify-between gap-2.5">
+                          <span className={`w-6 h-6 rounded-full shrink-0 ${CATEGORY_BADGE[mobileCategory]}`} />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-slate-700 leading-tight break-words">{p.name}</p>
+                            <p className="text-[11px] text-slate-500">{resolveGrade(p)}</p>
+                          </div>
+                          <div className="flex items-center gap-1 ml-auto">
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleSelectPlayer(p.id); }}
                             aria-label={selectedPlayerIds.includes(p.id) ? '選択解除' : '選択'}
@@ -571,6 +640,7 @@ export default function FreeformBoard({ date }: Props) {
                         key={p.id}
                         player={p}
                         category={category}
+                        grade={resolveGrade(p)}
                         selected={selectedPlayerIds.includes(p.id)}
                         onToggleSelect={toggleSelectPlayer}
                         onEdit={startEditPlayer}
@@ -582,7 +652,7 @@ export default function FreeformBoard({ date }: Props) {
               ))}
             </div>
             <DragOverlay>
-              {activePlayer ? <PlayerCardOverlay player={activePlayer} /> : null}
+              {activePlayer ? <PlayerCardOverlay player={activePlayer} grade={resolveGrade(activePlayer)} /> : null}
             </DragOverlay>
           </DndContext>
         )}
@@ -596,6 +666,13 @@ export default function FreeformBoard({ date }: Props) {
               onChange={(e) => setEditName(e.target.value)}
               className="mt-3 w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             />
+            <select
+              value={editGrade}
+              onChange={(e) => setEditGrade(e.target.value as Grade)}
+              className="mt-2 w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              {GRADE_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
             {formError && <p className="mt-2 text-xs text-rose-500 font-semibold">{formError}</p>}
             <div className="mt-4 flex justify-end gap-2">
               <button
