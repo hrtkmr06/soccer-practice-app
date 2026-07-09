@@ -29,6 +29,7 @@ export default function CalendarView({ onEditSession }: Props) {
   const [current, setCurrent] = useState({ year: today.getFullYear(), month: today.getMonth() });
   const [sessions, setSessions] = useState<PracticeSession[]>([]);
   const [blocksMap, setBlocksMap] = useState<Record<string, SessionBlock[]>>({});
+  const [slotCountMap, setSlotCountMap] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<PracticeSession | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -51,6 +52,20 @@ export default function CalendarView({ onEditSession }: Props) {
       setSessions(typedSessions);
       const ids = typedSessions.map((s: PracticeSession) => s.id);
       if (ids.length > 0) {
+        const { data: slotData } = await supabase
+          .from('ground_slots')
+          .select('session_id')
+          .in('session_id', ids);
+        if (slotData) {
+          const nextSlotCount: Record<string, number> = {};
+          (slotData as { session_id: string }[]).forEach((row) => {
+            nextSlotCount[row.session_id] = (nextSlotCount[row.session_id] ?? 0) + 1;
+          });
+          setSlotCountMap(nextSlotCount);
+        } else {
+          setSlotCountMap({});
+        }
+
         const { data: blockData } = await supabase
           .from('session_blocks')
           .select('*, practice_menu:practice_menus(*)')
@@ -71,6 +86,7 @@ export default function CalendarView({ onEditSession }: Props) {
         }
       } else {
         setBlocksMap({});
+        setSlotCountMap({});
       }
     }
     setLoading(false);
@@ -154,6 +170,9 @@ export default function CalendarView({ onEditSession }: Props) {
               {cells.map((cell, idx) => {
                 const session = cell.current ? sessionByDate[cell.dateStr] : undefined;
                 const blocks = session ? blocksMap[session.id] ?? [] : [];
+                const slotCount = session ? (slotCountMap[session.id] ?? 0) : 0;
+                const isMatchDay = session?.event_type === 'トレーニングマッチ' || session?.event_type === '公式戦';
+                const shouldShowSessionBadge = Boolean(session) && (isMatchDay || slotCount > 0 || blocks.length > 0);
                 const isToday = cell.dateStr === todayStr;
                 const dow = new Date(`${cell.dateStr}T00:00:00`).getDay();
 
@@ -167,7 +186,7 @@ export default function CalendarView({ onEditSession }: Props) {
                       {cell.day}
                     </div>
 
-                    {session && (
+                    {shouldShowSessionBadge && session && (
                       <div className="space-y-0.5">
                         <div className={`flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] sm:text-[11px] font-semibold truncate ${getEventBadgeClass(session)}`}>
                           <WeatherIcon w={session.weather} />
