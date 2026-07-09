@@ -72,7 +72,7 @@ export default function MenuStockSidebar({
 
       <aside className={`
         fixed lg:relative inset-y-0 left-0 z-40 lg:z-auto
-        w-80 flex flex-col bg-white border-r border-slate-200
+        w-80 h-full min-h-0 flex flex-col bg-white border-r border-slate-200
         transform transition-transform duration-300 ease-in-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}
@@ -137,7 +137,7 @@ export default function MenuStockSidebar({
         </div>
 
         {/* Menu cards */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-2">
           {filtered.length === 0 ? (
             <div className="text-center py-10 text-slate-400 text-sm">
               <BookOpen className="w-8 h-8 mx-auto mb-2 opacity-40" />
