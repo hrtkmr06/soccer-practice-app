@@ -166,64 +166,69 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
     drafts: Omit<GroundSlot, 'id' | 'session_id' | 'created_at'>[],
   ) {
     if (!session) return;
-    setShowAllocationModal(false);
+    try {
+      const existingSlots = groundSlots;
 
-    const existingSlots = groundSlots;
-    const sigToId: Record<string, string> = {};
-    existingSlots.forEach(s => {
-      sigToId[`${s.start_time}|${s.end_time}|${s.area}|${s.team}`] = s.id;
-    });
+      const toDelete = existingSlots.filter(s => {
+        const sig = `${s.start_time}|${s.end_time}|${s.area}|${s.team}`;
+        return !drafts.some(d => `${d.start_time}|${d.end_time}|${d.area}|${d.team}` === sig);
+      });
+      const toKeep = existingSlots.filter(s => {
+        const sig = `${s.start_time}|${s.end_time}|${s.area}|${s.team}`;
+        return drafts.some(d => `${d.start_time}|${d.end_time}|${d.area}|${d.team}` === sig);
+      });
+      const toInsert = drafts.filter(d => {
+        const sig = `${d.start_time}|${d.end_time}|${d.area}|${d.team}`;
+        return !existingSlots.some(s => `${s.start_time}|${s.end_time}|${s.area}|${s.team}` === sig);
+      });
 
-    const toDelete = existingSlots.filter(s => {
-      const sig = `${s.start_time}|${s.end_time}|${s.area}|${s.team}`;
-      return !drafts.some(d => `${d.start_time}|${d.end_time}|${d.area}|${d.team}` === sig);
-    });
-    const toKeep = existingSlots.filter(s => {
-      const sig = `${s.start_time}|${s.end_time}|${s.area}|${s.team}`;
-      return drafts.some(d => `${d.start_time}|${d.end_time}|${d.area}|${d.team}` === sig);
-    });
-    const toInsert = drafts.filter(d => {
-      const sig = `${d.start_time}|${d.end_time}|${d.area}|${d.team}`;
-      return !existingSlots.some(s => `${s.start_time}|${s.end_time}|${s.area}|${s.team}` === sig);
-    });
-
-    if (toDelete.length > 0) {
-      const ids = toDelete.map(s => s.id);
-      await supabase.from('session_blocks').delete().in('ground_slot_id', ids);
-      await supabase.from('ground_slots').delete().in('id', ids);
-    }
-
-    let newSlots: GroundSlot[] = [];
-    if (toInsert.length > 0) {
-      const { data } = await supabase
-        .from('ground_slots')
-        .insert(toInsert.map(d => ({ ...d, session_id: session.id })))
-        .select();
-      newSlots = data ?? [];
-    }
-
-    for (const s of toKeep) {
-      const idx = drafts.findIndex(d => `${d.start_time}|${d.end_time}|${d.area}|${d.team}` === `${s.start_time}|${s.end_time}|${s.area}|${s.team}`);
-      if (idx !== -1 && s.sort_order !== idx) {
-        await supabase.from('ground_slots').update({ sort_order: idx }).eq('id', s.id);
+      if (toDelete.length > 0) {
+        const ids = toDelete.map(s => s.id);
+        const delBlocksRes = await supabase.from('session_blocks').delete().in('ground_slot_id', ids);
+        if ('error' in delBlocksRes && delBlocksRes.error) throw delBlocksRes.error;
+        const delSlotsRes = await supabase.from('ground_slots').delete().in('id', ids);
+        if ('error' in delSlotsRes && delSlotsRes.error) throw delSlotsRes.error;
       }
+
+      let newSlots: GroundSlot[] = [];
+      if (toInsert.length > 0) {
+        const insertRes = await supabase
+          .from('ground_slots')
+          .insert(toInsert.map(d => ({ ...d, session_id: session.id })))
+          .select();
+        if ('error' in insertRes && insertRes.error) throw insertRes.error;
+        newSlots = insertRes.data ?? [];
+      }
+
+      for (const s of toKeep) {
+        const idx = drafts.findIndex(d => `${d.start_time}|${d.end_time}|${d.area}|${d.team}` === `${s.start_time}|${s.end_time}|${s.area}|${s.team}`);
+        if (idx !== -1 && s.sort_order !== idx) {
+          const updateRes = await supabase.from('ground_slots').update({ sort_order: idx }).eq('id', s.id);
+          if ('error' in updateRes && updateRes.error) throw updateRes.error;
+        }
+      }
+
+      const allSlots = [...toKeep.map((s) => {
+        const idx = drafts.findIndex(d => `${d.start_time}|${d.end_time}|${d.area}|${d.team}` === `${s.start_time}|${s.end_time}|${s.area}|${s.team}`);
+        return { ...s, sort_order: idx };
+      }), ...newSlots].sort((a, b) => a.sort_order - b.sort_order);
+
+      setGroundSlots(allSlots);
+
+      const newMap: Record<string, SessionBlock[]> = {};
+      toKeep.forEach(s => { newMap[s.id] = slotBlocksMap[s.id] ?? []; });
+      newSlots.forEach(s => { newMap[s.id] = []; });
+      setSlotBlocksMap(newMap);
+
+      const teams = Array.from(new Set(allSlots.map(s => s.team)));
+      const preferred = TEAMS.find(t => teams.includes(t));
+      if (preferred) setActiveTeam(preferred);
+
+      setShowAllocationModal(false);
+    } catch (error) {
+      console.error('ground allocation save failed', error);
+      throw new Error('グラウンド割りの保存に失敗しました。権限設定または通信状態を確認してください。');
     }
-
-    const allSlots = [...toKeep.map((s, _) => {
-      const idx = drafts.findIndex(d => `${d.start_time}|${d.end_time}|${d.area}|${d.team}` === `${s.start_time}|${s.end_time}|${s.area}|${s.team}`);
-      return { ...s, sort_order: idx };
-    }), ...newSlots].sort((a, b) => a.sort_order - b.sort_order);
-
-    setGroundSlots(allSlots);
-
-    const newMap: Record<string, SessionBlock[]> = {};
-    toKeep.forEach(s => { newMap[s.id] = slotBlocksMap[s.id] ?? []; });
-    newSlots.forEach(s => { newMap[s.id] = []; });
-    setSlotBlocksMap(newMap);
-
-    const teams = Array.from(new Set(allSlots.map(s => s.team)));
-    const preferred = TEAMS.find(t => teams.includes(t));
-    if (preferred) setActiveTeam(preferred);
   }
 
   async function deleteGroundSlot(slotId: string) {

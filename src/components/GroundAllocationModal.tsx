@@ -19,7 +19,7 @@ interface TimeRow {
 
 interface Props {
   existingSlots: GroundSlot[];
-  onConfirm: (drafts: Omit<GroundSlot, 'id' | 'session_id' | 'created_at'>[]) => void;
+  onConfirm: (drafts: Omit<GroundSlot, 'id' | 'session_id' | 'created_at'>[]) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -47,6 +47,8 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
   const [rows, setRows] = useState<TimeRow[]>(() =>
     existingSlots.length > 0 ? slotsToRows(existingSlots) : [makeDefaultRow()]
   );
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   function addRow() {
     const last = rows[rows.length - 1];
@@ -110,7 +112,8 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
     return row.cells[area] ?? [];
   }
 
-  function handleConfirm() {
+  async function handleConfirm() {
+    setErrorMessage('');
     const drafts: Omit<GroundSlot, 'id' | 'session_id' | 'created_at'>[] = [];
     let sortIdx = 0;
     rows.forEach(row => {
@@ -127,8 +130,18 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
         });
       });
     });
-    if (drafts.length === 0) return;
-    onConfirm(drafts);
+    if (drafts.length === 0) {
+      setErrorMessage('少なくとも1枠は設定してください。');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await onConfirm(drafts);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '保存に失敗しました。もう一度お試しください。');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const filledCount = rows.reduce(
@@ -417,20 +430,24 @@ export default function GroundAllocationModal({ existingSlots, onConfirm, onClos
           <p className="text-xs text-slate-400">
             {filledCount > 0 ? `${filledCount} 枠を設定中` : 'マス目にチームを選択してください'}
           </p>
+          {errorMessage && (
+            <p className="text-xs text-rose-500 font-semibold">{errorMessage}</p>
+          )}
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <button
               onClick={onClose}
+              disabled={submitting}
               className="w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm font-bold rounded-xl transition-colors"
             >
               キャンセル
             </button>
             <button
-              onClick={handleConfirm}
-              disabled={filledCount === 0}
+              onClick={() => { void handleConfirm(); }}
+              disabled={filledCount === 0 || submitting}
               className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-black rounded-xl transition-colors shadow-sm"
             >
               <Check className="w-4 h-4" />
-              確定して枠を生成
+              {submitting ? '保存中...' : '確定して枠を生成'}
             </button>
           </div>
         </div>
