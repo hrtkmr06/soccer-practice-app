@@ -42,61 +42,15 @@ function uuid() {
 }
 
 function makeLocalDb(): LocalDb {
-  const today = new Date();
-  const todayDate = today.toISOString().slice(0, 10);
-  const plus3 = new Date(today);
-  plus3.setDate(today.getDate() + 3);
-  const minus5 = new Date(today);
-  minus5.setDate(today.getDate() - 5);
-
   const menus: PracticeMenu[] = [
     { id: uuid(), title: 'ビルドアップ（3対2）', rules: '数的優位で前進。', points: '角度と体の向き。', tags: ['ビルドアップ', 'TR1'], created_at: nowIso() },
     { id: uuid(), title: 'ポゼッション（4対2）', rules: '10m四方でロンド。', points: 'テンポとサポート。', tags: ['W-UP', 'ポゼッション'], created_at: nowIso() },
     { id: uuid(), title: 'ゲーム形式（8対8）', rules: 'テーマ再現を重視。', points: '切替と予測。', tags: ['ゲーム', 'TR2'], created_at: nowIso() },
   ];
 
-  const sessions: PracticeSession[] = [
-    { id: uuid(), date: todayDate, overall_theme: 'ビルドアップの再現性向上', weather: '晴れ', notes: 'ローカルモード', created_at: nowIso() },
-    { id: uuid(), date: plus3.toISOString().slice(0, 10), overall_theme: '守備ブロックの整理', weather: '曇り', notes: null, created_at: nowIso() },
-    { id: uuid(), date: minus5.toISOString().slice(0, 10), overall_theme: 'トランジション改善', weather: '晴れ', notes: null, created_at: nowIso() },
-  ];
-
-  const slots: GroundSlot[] = [
-    { id: uuid(), session_id: sessions[0].id, start_time: '14:00', end_time: '14:20', area: 'テニス側', team: 'Aチーム', sort_order: 0, created_at: nowIso() },
-    { id: uuid(), session_id: sessions[0].id, start_time: '14:00', end_time: '14:20', area: '野球側', team: 'Bチーム', sort_order: 1, created_at: nowIso() },
-    { id: uuid(), session_id: sessions[0].id, start_time: '14:25', end_time: '15:00', area: 'テニス側', team: 'Aチーム', sort_order: 2, created_at: nowIso() },
-  ];
-
-  const blocks: SessionBlockRow[] = [
-    {
-      id: uuid(),
-      session_id: sessions[0].id,
-      ground_slot_id: slots[0].id,
-      practice_menu_id: menus[1].id,
-      title: menus[1].title,
-      start_time: slots[0].start_time,
-      end_time: slots[0].end_time,
-      area: slots[0].area,
-      team: slots[0].team,
-      review: null,
-      sort_order: 0,
-      created_at: nowIso(),
-    },
-    {
-      id: uuid(),
-      session_id: sessions[0].id,
-      ground_slot_id: slots[1].id,
-      practice_menu_id: menus[0].id,
-      title: menus[0].title,
-      start_time: slots[1].start_time,
-      end_time: slots[1].end_time,
-      area: slots[1].area,
-      team: slots[1].team,
-      review: null,
-      sort_order: 0,
-      created_at: nowIso(),
-    },
-  ];
+  const sessions: PracticeSession[] = [];
+  const slots: GroundSlot[] = [];
+  const blocks: SessionBlockRow[] = [];
 
   const players: PlayerRow[] = [
     ['マト', 1, 'Aチーム'], ['寺沢', 2, 'Aチーム'], ['鈴木', 3, 'Aチーム'], ['田中', 4, 'Aチーム'],

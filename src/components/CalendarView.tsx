@@ -36,8 +36,8 @@ export default function CalendarView({ onEditSession }: Props) {
 
   async function fetchSessions() {
     setLoading(true);
-    const startDate = new Date(current.year, current.month, 1).toISOString().slice(0, 10);
-    const endDate = new Date(current.year, current.month + 1, 0).toISOString().slice(0, 10);
+    const startDate = formatLocalDate(new Date(current.year, current.month, 1));
+    const endDate = formatLocalDate(new Date(current.year, current.month + 1, 0));
 
     const { data: sessionData } = await supabase
       .from('practice_sessions')

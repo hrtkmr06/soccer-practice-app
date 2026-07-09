@@ -39,8 +39,15 @@ type MenuDragData = { type: 'menu'; menu: PracticeMenu };
 type BlockDragData = { type: 'block'; blockId: string; fromSlotId: string };
 type DragData = MenuDragData | BlockDragData;
 
+function formatLocalDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export default function PracticeEditor({ initialDate, onBack }: Props) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatLocalDate(new Date());
   const [activeDate, setActiveDate] = useState(initialDate ?? today);
   const [session, setSession] = useState<PracticeSession | null>(null);
   const [groundSlots, setGroundSlots] = useState<GroundSlot[]>([]);
@@ -75,6 +82,12 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
 
   useEffect(() => { fetchMenus(); }, []);
   useEffect(() => { fetchSession(); }, [activeDate, menus]);
+  useEffect(() => {
+    // Prevent writing to the previous date session while the next date is loading.
+    setSession(null);
+    setGroundSlots([]);
+    setSlotBlocksMap({});
+  }, [activeDate]);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(`practice-team-themes:${activeDate}`);
@@ -112,12 +125,20 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
   }
 
   async function fetchSession() {
-    const { data: existing } = await supabase
-      .from('practice_sessions').select('*').eq('date', activeDate).maybeSingle();
+    const { data: existingRows } = await supabase
+      .from('practice_sessions')
+      .select('*')
+      .eq('date', activeDate)
+      .order('created_at', { ascending: true });
+
+    const existing = (existingRows?.[0] ?? null) as PracticeSession | null;
 
     const sess = existing ?? await (async () => {
       const { data } = await supabase
-        .from('practice_sessions').insert({ date: activeDate, weather: '晴れ', event_type: '練習' }).select().single();
+        .from('practice_sessions')
+        .insert({ date: activeDate, weather: '晴れ' })
+        .select()
+        .single();
       return data;
     })();
     if (!sess) return;
