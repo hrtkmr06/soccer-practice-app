@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, X, Edit2,
-  Sun, Cloud, CloudRain, CloudSnow, ChevronDown, MessageSquare,
+  Sun, Cloud, CloudRain, CloudSnow, ChevronDown, MessageSquare, Trophy, MapPin, Clock3,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import {
@@ -169,7 +169,7 @@ export default function CalendarView({ onEditSession }: Props) {
 
                     {session && (
                       <div className="space-y-0.5">
-                        <div className="flex items-center gap-0.5 px-1 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] sm:text-[11px] font-semibold truncate">
+                        <div className={`flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] sm:text-[11px] font-semibold truncate ${getEventBadgeClass(session)}`}>
                           <WeatherIcon w={session.weather} />
                           <span className="truncate ml-0.5">{session.event_type ?? '練習'}</span>
                           {session.opponent && <span className="truncate ml-1">vs {session.opponent}</span>}
@@ -268,6 +268,8 @@ function SessionDetailModal({
   const dateLabel = new Date(session.date + 'T00:00:00').toLocaleDateString('ja-JP', {
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
   });
+  const isMatchDay = session.event_type === 'トレーニングマッチ' || session.event_type === '公式戦';
+  const matchCategoryLabel = session.match_category ?? (session.event_type === '公式戦' ? '公式戦' : '練習試合');
 
   // Group blocks by team, preserving order within teams by start_time
   const TEAM_ORDER = ['Aチーム', 'Bチーム', 'Cチーム', '一年生', '全体'];
@@ -324,7 +326,45 @@ function SessionDetailModal({
               {session.event_type ?? '練習'}
               {session.opponent ? ` vs ${session.opponent}` : ''}
             </h3>
-            {(session.match_category || session.competition || session.venue || session.kick_off) && (
+            {isMatchDay && (
+              <div className="mt-2 rounded-xl border border-blue-100 bg-blue-50/70 p-2.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-700 tracking-widest mb-2">
+                  <Trophy className="w-3.5 h-3.5" />
+                  試合詳細
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="rounded-lg bg-white border border-blue-100 px-2.5 py-2">
+                    <div className="text-[10px] font-bold text-slate-400 mb-0.5">対戦相手</div>
+                    <div className="text-sm font-semibold text-slate-700">{session.opponent || '未設定'}</div>
+                  </div>
+                  <div className="rounded-lg bg-white border border-blue-100 px-2.5 py-2">
+                    <div className="text-[10px] font-bold text-slate-400 mb-0.5">カテゴリー</div>
+                    <div className="text-sm font-semibold text-slate-700">{matchCategoryLabel}</div>
+                  </div>
+                  <div className="rounded-lg bg-white border border-blue-100 px-2.5 py-2">
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 mb-0.5">
+                      <Clock3 className="w-3 h-3" />
+                      時間
+                    </div>
+                    <div className="text-sm font-semibold text-slate-700">{session.kick_off || '未設定'}</div>
+                  </div>
+                  <div className="rounded-lg bg-white border border-blue-100 px-2.5 py-2">
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 mb-0.5">
+                      <MapPin className="w-3 h-3" />
+                      場所
+                    </div>
+                    <div className="text-sm font-semibold text-slate-700">{session.venue || '未設定'}</div>
+                  </div>
+                  {session.event_type === '公式戦' && (
+                    <div className="sm:col-span-2 rounded-lg bg-white border border-blue-100 px-2.5 py-2">
+                      <div className="text-[10px] font-bold text-slate-400 mb-0.5">大会名</div>
+                      <div className="text-sm font-semibold text-slate-700">{session.competition || '未設定'}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {!isMatchDay && (session.match_category || session.competition || session.venue || session.kick_off) && (
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                 {session.match_category ? `${session.match_category} ` : ''}
                 {session.competition ? `${session.competition} ` : ''}
@@ -485,6 +525,12 @@ function SessionDetailModal({
       </div>
     </div>
   );
+}
+
+function getEventBadgeClass(session: PracticeSession): string {
+  if (session.event_type === '公式戦') return 'bg-rose-100 text-rose-700';
+  if (session.event_type === 'トレーニングマッチ') return 'bg-blue-100 text-blue-700';
+  return 'bg-slate-100 text-slate-600';
 }
 
 function toPracticeMenu(menu: Menu, index: number): PracticeMenu {

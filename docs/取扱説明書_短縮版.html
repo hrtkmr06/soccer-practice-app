@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>サッカー練習管理アプリ 取扱説明書（配布用・短縮版）</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+        color: #0f172a;
+        margin: 28px;
+        line-height: 1.6;
+      }
+      h1 {
+        margin: 0 0 6px 0;
+        font-size: 24px;
+      }
+      .sub {
+        margin: 0 0 18px 0;
+        color: #475569;
+        font-size: 13px;
+      }
+      h2 {
+        margin: 18px 0 8px 0;
+        padding-left: 8px;
+        border-left: 4px solid #16a34a;
+        font-size: 16px;
+      }
+      h3 {
+        margin: 10px 0 6px 0;
+        font-size: 14px;
+      }
+      ul, ol {
+        margin: 4px 0 10px 20px;
+        padding: 0;
+      }
+      li {
+        margin: 2px 0;
+      }
+      .box {
+        border: 1px solid #dbe2ea;
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-top: 6px;
+        background: #f8fafc;
+      }
+      .small {
+        color: #64748b;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>サッカー練習管理アプリ 取扱説明書</h1>
+    <p class="sub">配布用・短縮版</p>
+
+    <h2>1. このアプリでできること</h2>
+    <ul>
+      <li>練習日の作成・管理</li>
+      <li>練習メニューのストック管理（閲覧・編集）</li>
+      <li>各チームのカテゴリー割り当て（選手移動）</li>
+      <li>グラウンド枠ごとの練習配置</li>
+      <li>試合予定（TM/公式戦）の記録</li>
+      <li>各メニューの総評・留意点の記録</li>
+    </ul>
+
+    <h2>2. 基本の使い方（1日の流れ）</h2>
+    <ol>
+      <li>日付を選ぶ</li>
+      <li>グラウンド割りを設定（時間・エリア・チーム）</li>
+      <li>メニュー作成で、ストックから枠へ配置</li>
+      <li>カテゴリー割り当てで選手をチーム別に整理</li>
+      <li>必要に応じて試合情報を入力</li>
+      <li>練習後に総評・留意点を記入</li>
+    </ol>
+
+    <h2>3. 主要機能の操作</h2>
+    <h3>練習メニュー</h3>
+    <ul>
+      <li>ストック一覧のカードを開くと、ルール / コーチングポイントを確認可能</li>
+      <li>必要に応じてその場で編集可能（タイトル・内容・タグ等）</li>
+    </ul>
+    <h3>選手管理</h3>
+    <ul>
+      <li>選手追加：単体追加 / 一括追加（改行区切り）</li>
+      <li>選手タグには学年表示あり</li>
+      <li>カテゴリー画面で移動・一括移動が可能</li>
+    </ul>
+    <h3>試合登録</h3>
+    <ul>
+      <li>まず「練習 / 試合」を選択</li>
+      <li>試合選択時のみ記入：対戦相手 / 種別（TM・公式戦）/ 大会名 / 場所 / 時間</li>
+    </ul>
+
+    <h2>4. スマホ運用のポイント</h2>
+    <ul>
+      <li>縦画面前提で操作可能</li>
+      <li>一部画面は横スクロールで全項目を確認</li>
+      <li>ドラッグしづらい場合は、タップ操作や入力方式で代替可能</li>
+    </ul>
+
+    <h2>5. よくある質問（FAQ）</h2>
+    <div class="box">
+      <p><strong>Q. ドラッグでずれる / うまく置けない</strong><br />A. 一度指を離して再操作してください。カテゴリ移動は一括移動でも対応できます。</p>
+      <p><strong>Q. 追加した内容が見当たらない</strong><br />A. 日付・チームタブ・カテゴリフィルタを確認してください。</p>
+      <p><strong>Q. 画面が真っ白になる</strong><br />A. 通信状態と環境変数（Supabase設定）を確認し、再読み込みしてください。</p>
+    </div>
+
+    <h2>6. 運用ルール（推奨）</h2>
+    <ul>
+      <li>メニュー名は短く統一（例：3vs2 トランジション）</li>
+      <li>コーチングポイントは1〜3行で簡潔に</li>
+      <li>試合情報は「相手名・種別・場所・時間」を必須入力</li>
+      <li>練習後、総評は当日中に記入</li>
+    </ul>
+
+    <p class="small">作成日: 2026-07-05</p>
+  </body>
+  </html>

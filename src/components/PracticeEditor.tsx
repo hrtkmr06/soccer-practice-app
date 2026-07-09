@@ -380,16 +380,14 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
     });
   }
 
-  async function saveMatchField<K extends keyof typeof matchDraft>(key: K, value: (typeof matchDraft)[K]) {
-    setMatchDraft(prev => ({ ...prev, [key]: value }));
-    const next = { ...matchDraft, [key]: value };
+  async function saveMatchDraft() {
     await saveSession({
-      event_type: next.event_type,
-      opponent: next.opponent || null,
-      match_category: next.event_type === '公式戦' ? '公式戦' : '練習試合',
-      competition: next.event_type === '公式戦' ? (next.competition || '') : null,
-      venue: next.venue || null,
-      kick_off: next.kick_off || null,
+      event_type: matchDraft.event_type,
+      opponent: matchDraft.opponent || null,
+      match_category: matchDraft.event_type === '公式戦' ? '公式戦' : '練習試合',
+      competition: matchDraft.event_type === '公式戦' ? (matchDraft.competition || '') : null,
+      venue: matchDraft.venue || null,
+      kick_off: matchDraft.kick_off || null,
     });
   }
 
@@ -540,7 +538,14 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">試合種別</label>
               <select
                 value={matchDraft.event_type}
-                onChange={e => { void saveMatchField('event_type', e.target.value as 'トレーニングマッチ' | '公式戦'); }}
+                onChange={e => {
+                  const nextType = e.target.value as 'トレーニングマッチ' | '公式戦';
+                  setMatchDraft(prev => ({
+                    ...prev,
+                    event_type: nextType,
+                    competition: nextType === '公式戦' ? prev.competition : '',
+                  }));
+                }}
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <option value="トレーニングマッチ">トレーニングマッチ</option>
@@ -554,7 +559,6 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
                 type="text"
                 value={matchDraft.opponent}
                 onChange={e => setMatchDraft(prev => ({ ...prev, opponent: e.target.value }))}
-                onBlur={e => { void saveMatchField('opponent', e.target.value); }}
                 placeholder="例: ○○高校"
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-slate-300"
               />
@@ -566,7 +570,6 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
                 type="text"
                 value={matchDraft.venue}
                 onChange={e => setMatchDraft(prev => ({ ...prev, venue: e.target.value }))}
-                onBlur={e => { void saveMatchField('venue', e.target.value); }}
                 placeholder="例: ○○グラウンド"
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-slate-300"
               />
@@ -578,7 +581,6 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
                 type="time"
                 value={matchDraft.kick_off}
                 onChange={e => setMatchDraft(prev => ({ ...prev, kick_off: e.target.value }))}
-                onBlur={e => { void saveMatchField('kick_off', e.target.value); }}
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
               />
             </div>
@@ -589,11 +591,19 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
                 type="text"
                 value={matchDraft.competition}
                 onChange={e => setMatchDraft(prev => ({ ...prev, competition: e.target.value }))}
-                onBlur={e => { void saveMatchField('competition', e.target.value); }}
                 placeholder="例: 高円宮杯 県予選"
                 disabled={matchDraft.event_type !== '公式戦'}
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-slate-100 disabled:text-slate-400 placeholder-slate-300"
               />
+            </div>
+
+            <div className="sm:col-span-2 lg:col-span-3 flex justify-end">
+              <button
+                onClick={() => { void saveMatchDraft(); }}
+                className="px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-bold hover:bg-green-700"
+              >
+                試合情報を反映
+              </button>
             </div>
           </div>
           )}
