@@ -29,6 +29,13 @@ type Category = typeof CATEGORIES[number];
 const GRADE_OPTIONS = ['1年', '2年', '3年', 'スタッフ'] as const;
 type Grade = typeof GRADE_OPTIONS[number];
 const PLAYER_GRADE_STORAGE_KEY = 'practice-player-grades';
+const GRADE_BADGE: Record<string, string> = {
+  '1年': 'bg-sky-100 text-sky-700 border-sky-200',
+  '2年': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  '3年': 'bg-amber-100 text-amber-700 border-amber-200',
+  'スタッフ': 'bg-violet-100 text-violet-700 border-violet-200',
+  '学年未設定': 'bg-slate-100 text-slate-500 border-slate-200',
+};
 
 const CATEGORY_BADGE: Record<Category, string> = {
   'Aチーム': 'bg-slate-900 text-white',
@@ -132,7 +139,11 @@ function DraggablePlayerCard({
         <span className={`w-6 h-6 rounded-full shrink-0 ${CATEGORY_BADGE[category]}`} />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-slate-700 leading-tight break-words">{player.name}</p>
-          {grade ? <p className="text-[11px] text-slate-500">{grade}</p> : null}
+          {grade ? (
+            <span className={`inline-flex items-center mt-1 px-1.5 py-0.5 rounded-md border text-[10px] font-bold ${GRADE_BADGE[grade] ?? GRADE_BADGE['学年未設定']}`}>
+              {grade}
+            </span>
+          ) : null}
         </div>
         <div className="flex items-center gap-1 ml-auto">
           <button
@@ -177,7 +188,11 @@ function PlayerCardOverlay({ player, grade }: { player: Player; grade: string })
         <span className="w-6 h-6 rounded-full shrink-0 bg-green-600" />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-slate-700 break-words">{player.name}</p>
-          {grade ? <p className="text-[11px] text-slate-500">{grade}</p> : null}
+          {grade ? (
+            <span className={`inline-flex items-center mt-1 px-1.5 py-0.5 rounded-md border text-[10px] font-bold ${GRADE_BADGE[grade] ?? GRADE_BADGE['学年未設定']}`}>
+              {grade}
+            </span>
+          ) : null}
         </div>
       </div>
     </div>
@@ -683,7 +698,9 @@ export default function FreeformBoard({ date }: Props) {
                           <span className={`w-6 h-6 rounded-full shrink-0 ${CATEGORY_BADGE[mobileCategory]}`} />
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold text-slate-700 leading-tight break-words">{p.name}</p>
-                            <p className="text-[11px] text-slate-500">{resolveGrade(p)}</p>
+                            <span className={`inline-flex items-center mt-1 px-1.5 py-0.5 rounded-md border text-[10px] font-bold ${GRADE_BADGE[resolveGrade(p)] ?? GRADE_BADGE['学年未設定']}`}>
+                              {resolveGrade(p)}
+                            </span>
                           </div>
                           <div className="flex items-center gap-1 ml-auto">
                           <button
