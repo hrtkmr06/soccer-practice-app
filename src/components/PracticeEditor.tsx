@@ -64,6 +64,8 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
     kick_off: '',
     competition: '',
   });
+  const [matchSaveState, setMatchSaveState] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [matchSaveMessage, setMatchSaveMessage] = useState('');
   const [subView, setSubView] = useState<'menu' | 'whiteboard'>('menu');
 
   const sensors = useSensors(
@@ -386,14 +388,28 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
   }
 
   async function saveMatchDraft() {
-    await saveSession({
-      event_type: matchDraft.event_type,
-      opponent: matchDraft.opponent || null,
-      match_category: matchDraft.event_type === '公式戦' ? '公式戦' : '練習試合',
-      competition: matchDraft.event_type === '公式戦' ? (matchDraft.competition || '') : null,
-      venue: matchDraft.venue || null,
-      kick_off: matchDraft.kick_off || null,
-    });
+    setMatchSaveState('saving');
+    setMatchSaveMessage('保存中...');
+    try {
+      await saveSession({
+        event_type: matchDraft.event_type,
+        opponent: matchDraft.opponent || null,
+        match_category: matchDraft.event_type === '公式戦' ? '公式戦' : '練習試合',
+        competition: matchDraft.event_type === '公式戦' ? (matchDraft.competition || '') : null,
+        venue: matchDraft.venue || null,
+        kick_off: matchDraft.kick_off || null,
+      });
+      setMatchSaveState('success');
+      setMatchSaveMessage('試合情報の反映が完了しました。');
+      window.setTimeout(() => {
+        setMatchSaveState('idle');
+        setMatchSaveMessage('');
+      }, 2500);
+    } catch (error) {
+      setMatchSaveState('error');
+      setMatchSaveMessage('試合情報の反映に失敗しました。再度お試しください。');
+      console.error('match save failed', error);
+    }
   }
 
   function handleDragStart(e: DragStartEvent) {
@@ -605,11 +621,19 @@ export default function PracticeEditor({ initialDate, onBack }: Props) {
             <div className="sm:col-span-2 lg:col-span-3 flex justify-end">
               <button
                 onClick={() => { void saveMatchDraft(); }}
-                className="px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-bold hover:bg-green-700"
+                disabled={matchSaveState === 'saving'}
+                className="px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-bold hover:bg-green-700 disabled:opacity-50 disabled:pointer-events-none"
               >
-                試合情報を反映
+                {matchSaveState === 'saving' ? '反映中...' : '試合情報を反映'}
               </button>
             </div>
+            {matchSaveMessage && (
+              <div className={`sm:col-span-2 lg:col-span-3 text-xs font-semibold ${
+                matchSaveState === 'error' ? 'text-rose-500' : 'text-green-600'
+              }`}>
+                {matchSaveMessage}
+              </div>
+            )}
           </div>
           )}
         </div>
